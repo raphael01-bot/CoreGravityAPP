@@ -1375,6 +1375,15 @@
                 allowsVideos: true,
                 description: 'Programación individualizada, evaluación mensual y videos demostrativos de cada rutina.'
             },
+            individual_editable: {
+                name: 'Plan Individual Editable',
+                price: 650,
+                daysDuration: 30,
+                category: 'Mensualidades',
+                badge: 'Individual · Editable',
+                allowsVideos: true,
+                description: 'Plan individual flexible y 100% editable en tarifa, días y programación según los objetivos del atleta.'
+            },
             avanzado: {
                 name: 'Plan Avanzado (Skills & Lastre)',
                 price: 750,
@@ -1497,6 +1506,7 @@
             if (
                 nameLower.includes('personalizado') ||
                 nameLower.includes('personalizada') ||
+                nameLower.includes('individual') ||
                 nameLower.includes('avanzado') ||
                 nameLower.includes('avanzada') ||
                 nameLower.includes('vip') ||
@@ -1507,6 +1517,13 @@
                 return true;
             }
             return false;
+        }
+
+        function planSupportsAthleteEditing(planKey, planName = '') {
+            if (planKey === 'individual_editable') return true;
+            const plan = GYM_PLANS[planKey];
+            const nameLower = (plan?.name || planName || planKey || '').toLowerCase();
+            return nameLower.includes('individual editable') || nameLower.includes('editable');
         }
 
         // =================================================================
@@ -1791,6 +1808,16 @@
             if (text) text.textContent = connected ? 'Nube Compartida' : 'Modo Local';
         }
 
+        function ensureBuiltInPlansPresent() {
+            if (!GYM_PLANS || typeof GYM_PLANS !== 'object') {
+                GYM_PLANS = JSON.parse(JSON.stringify(DEFAULT_GYM_PLANS));
+                return;
+            }
+            if (!GYM_PLANS.individual_editable) {
+                GYM_PLANS.individual_editable = JSON.parse(JSON.stringify(DEFAULT_GYM_PLANS.individual_editable));
+            }
+        }
+
         function loadLocalPlans() {
             try {
                 const rawPlans = localStorage.getItem(PLANS_STORAGE_KEY);
@@ -1808,6 +1835,7 @@
             } catch (e) {
                 console.warn('Error leyendo planes locales:', e);
             }
+            ensureBuiltInPlansPresent();
             try {
                 const rawFin = localStorage.getItem(FINANCE_STORAGE_KEY);
                 if (rawFin) {
@@ -1923,6 +1951,7 @@
                                     }
                                 });
                                 GYM_PLANS = plansRow.payload.plans;
+                                ensureBuiltInPlansPresent();
                                 localStorage.setItem(PLANS_STORAGE_KEY, JSON.stringify(GYM_PLANS));
                             }
 
@@ -4136,14 +4165,17 @@
 
         async function buildPrivateRoutineUrl(student) {
             const allowVideos = planSupportsVideos(student.planKey);
+            const allowAthleteEdit = planSupportsAthleteEditing(student.planKey);
             const plan = GYM_PLANS[student.planKey] || { name: 'Plan General' };
             const payload = {
                 id: student.id,
                 n: student.name,
                 l: student.level || 'Básico',
                 p: plan.name,
+                pk: student.planKey || '',
                 d: student.trainingDays || '',
                 v: allowVideos ? 1 : 0,
+                e: allowAthleteEdit ? 1 : 0,
                 g: student.routine?.goal || '',
                 o: student.routine?.notes || '',
                 b: (student.routine?.blocks || []).map(blk => ({
@@ -4161,14 +4193,17 @@
             const st = await saveStudentRoutine(true);
             if (!st) return;
             const allowVideos = planSupportsVideos(st.planKey);
+            const allowAthleteEdit = planSupportsAthleteEditing(st.planKey);
             const plan = GYM_PLANS[st.planKey] || { name: 'Plan General' };
             const payload = {
                 id: st.id,
                 n: st.name,
                 l: st.level || 'Básico',
                 p: plan.name,
+                pk: st.planKey || '',
                 d: st.trainingDays || '',
                 v: allowVideos ? 1 : 0,
+                e: allowAthleteEdit ? 1 : 0,
                 g: st.routine?.goal || '',
                 o: st.routine?.notes || '',
                 b: (st.routine?.blocks || []).map(blk => ({
@@ -4180,6 +4215,7 @@
             };
             closeRoutineModal();
             selectedAthleteBlockIndex = 0;
+            isAthleteEditingRoutine = false;
             renderAthletePrivateView(payload, true);
         }
 
@@ -4302,6 +4338,158 @@
         // =================================================================
         // RENDERIZADO DE LA VISTA PRIVADA DEL ALUMNO
         // =================================================================
+        let isAthleteEditingRoutine = false;
+
+        function toggleAthleteRoutineEditor(forceState) {
+            if (!activeAthletePayload) return;
+            isAthleteEditingRoutine = typeof forceState === 'boolean' ? forceState : !isAthleteEditingRoutine;
+            const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
+            renderAthletePrivateView(activeAthletePayload, isPreview);
+        }
+
+        function addAthleteEditableDay() {
+            if (!activeAthletePayload) return;
+            syncAthleteEditorToPayload();
+            if (!Array.isArray(activeAthletePayload.b)) activeAthletePayload.b = [];
+            const nextNum = activeAthletePayload.b.length + 1;
+            activeAthletePayload.b.push({
+                t: `Día ${nextNum} — Mi Entrenamiento`,
+                u: '',
+                x: ''
+            });
+            selectedAthleteBlockIndex = activeAthletePayload.b.length - 1;
+            const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
+            renderAthletePrivateView(activeAthletePayload, isPreview);
+        }
+
+        function removeAthleteEditableDay(dayIdx) {
+            if (!activeAthletePayload || !Array.isArray(activeAthletePayload.b)) return;
+            syncAthleteEditorToPayload();
+            if (activeAthletePayload.b.length <= 1) {
+                showToast('Debe existir al menos un día en tu rutina.', true);
+                return;
+            }
+            activeAthletePayload.b.splice(dayIdx, 1);
+            if (selectedAthleteBlockIndex >= activeAthletePayload.b.length) {
+                selectedAthleteBlockIndex = Math.max(0, activeAthletePayload.b.length - 1);
+            }
+            const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
+            renderAthletePrivateView(activeAthletePayload, isPreview);
+        }
+
+        function syncAthleteEditorToPayload() {
+            if (!activeAthletePayload || !isAthleteEditingRoutine) return;
+            const goalInp = document.getElementById('athlete-edit-goal');
+            const notesInp = document.getElementById('athlete-edit-notes');
+            if (goalInp) activeAthletePayload.g = goalInp.value;
+            if (notesInp) activeAthletePayload.o = notesInp.value;
+
+            document.querySelectorAll('[data-athlete-edit-day]').forEach(card => {
+                const idx = Number(card.getAttribute('data-athlete-edit-day'));
+                if (!activeAthletePayload.b[idx]) return;
+                const titleInp = card.querySelector('.athlete-day-title-input');
+                const videoInp = card.querySelector('.athlete-day-video-input');
+                const textInp = card.querySelector('.athlete-day-text-input');
+                if (titleInp) activeAthletePayload.b[idx].t = titleInp.value;
+                if (videoInp) activeAthletePayload.b[idx].u = videoInp.value;
+                if (textInp) activeAthletePayload.b[idx].x = textInp.value;
+            });
+        }
+
+        async function saveAthleteCustomRoutine() {
+            if (!activeAthletePayload) return;
+            syncAthleteEditorToPayload();
+
+            const saveBtn = document.getElementById('athlete-save-routine-btn');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i><span>Guardando mi rutina...</span>`;
+            }
+
+            const canWatchVideos = activeAthletePayload.v === 1 || activeAthletePayload.v === true;
+            const today = getTodayStr();
+            const normalizedBlocks = (Array.isArray(activeAthletePayload.b) ? activeAthletePayload.b : []).map((blk, idx) => ({
+                title: (blk.t || `Día ${idx + 1}`).trim(),
+                videoUrl: canWatchVideos ? (blk.u || '').trim() : '',
+                text: (blk.x || '').trim()
+            }));
+
+            activeAthletePayload.b = normalizedBlocks.map(blk => ({
+                t: blk.title,
+                u: blk.videoUrl,
+                x: blk.text
+            }));
+
+            const routineObj = {
+                goal: (activeAthletePayload.g || '').trim(),
+                notes: (activeAthletePayload.o || '').trim(),
+                updatedAt: today,
+                editedByAthlete: true,
+                blocks: normalizedBlocks
+            };
+
+            try {
+                const studentId = activeAthletePayload.id;
+                let syncedToCloud = false;
+
+                if (studentId) {
+                    const liveCheck = await fetchLiveStudentFromSupabase(studentId);
+                    if (liveCheck && !liveCheck.deleted && liveCheck.student) {
+                        const targetSt = liveCheck.student;
+                        targetSt.routine = routineObj;
+                        if (!Array.isArray(targetSt.routineHistory)) targetSt.routineHistory = [];
+                        targetSt.routineHistory.unshift({
+                            id: 'rh_athlete_' + Date.now(),
+                            monthLabel: `${getMonthYearLabel(new Date())} (Editada por Alumno)`,
+                            savedDate: today,
+                            routine: JSON.parse(JSON.stringify(routineObj))
+                        });
+                        await upsertSupabaseStudent(targetSt);
+                        syncedToCloud = true;
+                    }
+
+                    const localIdx = students.findIndex(s => s.id === studentId);
+                    if (localIdx !== -1) {
+                        students[localIdx].routine = routineObj;
+                        if (!Array.isArray(students[localIdx].routineHistory)) students[localIdx].routineHistory = [];
+                        students[localIdx].routineHistory.unshift({
+                            id: 'rh_athlete_' + Date.now(),
+                            monthLabel: `${getMonthYearLabel(new Date())} (Editada por Alumno)`,
+                            savedDate: today,
+                            routine: JSON.parse(JSON.stringify(routineObj))
+                        });
+                        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(students));
+                        if (!syncedToCloud) {
+                            await upsertSupabaseStudent(students[localIdx]);
+                        }
+                    } else {
+                        try {
+                            const rawLocal = localStorage.getItem(LOCAL_STORAGE_KEY);
+                            const parsedLocal = rawLocal ? JSON.parse(rawLocal) : [];
+                            const idx = parsedLocal.findIndex(s => s.id === studentId);
+                            if (idx !== -1) {
+                                parsedLocal[idx].routine = routineObj;
+                                localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(parsedLocal));
+                            }
+                        } catch (e) {}
+                    }
+                }
+
+                isAthleteEditingRoutine = false;
+                const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
+                renderAthletePrivateView(activeAthletePayload, isPreview);
+                showToast('¡Tu rutina personalizada ha sido guardada y sincronizada!');
+            } catch (err) {
+                console.error('Error guardando rutina del alumno:', err);
+                showToast('No se pudo guardar la rutina. Intenta de nuevo.', true);
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i><span>Guardar Mi Rutina</span>`;
+                }
+            }
+        }
+
         function parseBlockCircuits(rawText) {
             const lines = (rawText || '').split('\n').map(l => l.trim()).filter(Boolean);
             const circuits = [];
@@ -4346,6 +4534,7 @@
             const container = document.getElementById('athlete-routine-content');
             const blocks = Array.isArray(payload.b) ? payload.b : [];
             const canWatchVideos = payload.v === 1 || payload.v === true;
+            const canEditRoutine = payload.e === 1 || payload.e === true || planSupportsAthleteEditing(payload.pk, payload.p);
             const recentLogs = Array.isArray(payload.logs) ? payload.logs.slice(0, 5) : [];
 
             // Asegurar que el índice seleccionado sea válido
@@ -4353,8 +4542,30 @@
                 selectedAthleteBlockIndex = 0;
             }
 
+            // Banner y botón de modo edición exclusivo para Plan Individual Editable
+            const editablePlanControlsHtml = canEditRoutine ? `
+                <div class="pt-3 mt-1 border-t border-bandido-border/80 flex flex-wrap items-center justify-between gap-2.5">
+                    <div class="flex items-center gap-2 text-xs text-cyan-200">
+                        <span class="px-2 py-0.5 rounded-md bg-cyan-500/20 border border-cyan-400/40 text-cyan-300 text-[10px] font-extrabold uppercase">
+                            <i class="fa-solid fa-wand-magic-sparkles mr-1"></i>Plan Editable Activo
+                        </span>
+                        <span class="text-[11px] text-zinc-300 hidden sm:inline">Puedes crear, modificar o agregar días a tu propia rutina.</span>
+                    </div>
+                    <button type="button"
+                            onclick="toggleAthleteRoutineEditor()"
+                            class="px-3.5 py-2 rounded-xl text-xs font-extrabold uppercase tracking-wider transition cursor-pointer flex items-center gap-1.5 ${
+                                isAthleteEditingRoutine
+                                    ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-bandido-border'
+                                    : 'bg-bandido-orange hover:bg-bandido-orange-hover text-black shadow-lg shadow-cyan-500/25'
+                            }">
+                        <i class="fa-solid ${isAthleteEditingRoutine ? 'fa-eye' : 'fa-pen-to-square'}"></i>
+                        <span>${isAthleteEditingRoutine ? 'Ver Modo Entrenamiento' : 'Crear / Editar Mi Rutina'}</span>
+                    </button>
+                </div>
+            ` : '';
+
             // Pestañas/botones interactivos por cada día de entrenamiento debajo del nombre del alumno
-            const dayTabsHtml = blocks.length > 0 ? `
+            const dayTabsHtml = (!isAthleteEditingRoutine && blocks.length > 0) ? `
                 <div class="pt-3 mt-1 border-t border-bandido-border/80 space-y-2">
                     <div class="flex items-center justify-between gap-2">
                         <span class="text-[11px] font-extrabold uppercase tracking-wider text-zinc-400">
@@ -4384,16 +4595,125 @@
                         }).join('')}
                     </div>
                 </div>
-            ` : (payload.d ? `
+            ` : (!isAthleteEditingRoutine && payload.d ? `
                 <div class="pt-2 border-t border-bandido-border/80">
                     <span class="text-xs text-zinc-300"><i class="fa-solid fa-calendar-days text-bandido-orange mr-1.5"></i>Días asignados: <strong>${escapeHtml(payload.d)}</strong></span>
                 </div>
             ` : '');
 
-            // Renderizar únicamente la rutina del día seleccionado
+            // Renderizar ya sea el Creador/Editor de Rutina del Alumno o la Vista de Entrenamiento del día
             let activeBlockHtml = '';
-            if (blocks.length === 0) {
-                activeBlockHtml = `<div class="p-6 rounded-2xl bg-bandido-card border border-bandido-border text-center text-xs text-zinc-400">Aún no hay rutinas cargadas para tus días de entrenamiento.</div>`;
+            if (canEditRoutine && isAthleteEditingRoutine) {
+                const editableDays = blocks.length > 0
+                    ? blocks
+                    : [{ t: 'Día 1 — Mi Entrenamiento', u: '', x: '' }];
+                if (blocks.length === 0) activeAthletePayload.b = editableDays;
+
+                activeBlockHtml = `
+                    <section class="p-4 sm:p-5 rounded-2xl bg-bandido-card border-2 border-bandido-orange/50 space-y-4 shadow-xl">
+                        <div class="flex items-center justify-between gap-2 border-b border-bandido-border pb-3">
+                            <div>
+                                <span class="text-[10px] font-extrabold uppercase tracking-widest text-bandido-orange">Constructor Personal</span>
+                                <h3 class="font-display text-lg font-bold uppercase text-white">Diseña y Edita Tu Propia Rutina</h3>
+                            </div>
+                            <button type="button" onclick="addAthleteEditableDay()"
+                                    class="px-3 py-2 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-orange/50 text-xs font-extrabold text-bandido-orange transition cursor-pointer flex items-center gap-1.5">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Agregar Día</span>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3.5 rounded-xl bg-bandido-dark border border-bandido-border">
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-bandido-orange mb-1">Mi Objetivo Principal</label>
+                                <input type="text"
+                                       id="athlete-edit-goal"
+                                       value="${escapeHtml(payload.g || '')}"
+                                       placeholder="Ej. Dominar Muscle-up y aumentar fuerza"
+                                       class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                            </div>
+                            <div>
+                                <label class="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Mis Notas / Descansos</label>
+                                <input type="text"
+                                       id="athlete-edit-notes"
+                                       value="${escapeHtml(payload.o || '')}"
+                                       placeholder="Ej. Descansar 90 seg entre cada serie"
+                                       class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                            </div>
+                        </div>
+
+                        <div class="space-y-3.5">
+                            ${editableDays.map((blk, dIdx) => `
+                                <div data-athlete-edit-day="${dIdx}" class="p-4 rounded-xl bg-bandido-dark border border-bandido-border space-y-3">
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="flex items-center gap-2 flex-1">
+                                            <span class="px-2 py-0.5 rounded bg-bandido-orange text-black text-[10px] font-black uppercase">Día ${dIdx + 1}</span>
+                                            <input type="text"
+                                                   value="${escapeHtml(blk.t || `Día ${dIdx + 1}`)}"
+                                                   placeholder="Nombre del día (Ej. Día 1 — Tirón y Core)"
+                                                   class="athlete-day-title-input flex-1 px-3 py-1.5 rounded-xl bg-bandido-card border border-bandido-border text-xs font-bold text-white focus:outline-none focus:border-bandido-orange" />
+                                        </div>
+                                        ${editableDays.length > 1 ? `
+                                            <button type="button" onclick="removeAthleteEditableDay(${dIdx})"
+                                                    title="Eliminar este día"
+                                                    class="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 cursor-pointer">
+                                                <i class="fa-solid fa-trash text-xs"></i>
+                                            </button>
+                                        ` : ''}
+                                    </div>
+
+                                    ${canWatchVideos ? `
+                                        <div>
+                                            <label class="block text-[10px] font-bold uppercase tracking-wider text-sky-300 mb-1">
+                                                <i class="fa-solid fa-video mr-1"></i>Video de referencia (Opcional: Reel, Short o Drive)
+                                            </label>
+                                            <input type="url"
+                                                   value="${escapeHtml(blk.u || '')}"
+                                                   placeholder="https://www.instagram.com/reel/..."
+                                                   class="athlete-day-video-input w-full px-3 py-2 rounded-xl bg-bandido-card border border-sky-400/30 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-sky-400" />
+                                        </div>
+                                    ` : ''}
+
+                                    <div>
+                                        <label class="block text-[10px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
+                                            Ejercicios, repeticiones y series (escribe "4 series" al final de cada circuito)
+                                        </label>
+                                        <textarea rows="4"
+                                                  placeholder="Dominadas pronas / 8 reps&#10;Fondos en paralelas / 12 reps&#10;4 series"
+                                                  class="athlete-day-text-input w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-bandido-orange font-mono leading-relaxed">${escapeHtml(blk.x || '')}</textarea>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <div class="flex flex-wrap items-center justify-end gap-2.5 pt-2 border-t border-bandido-border">
+                            <button type="button" onclick="toggleAthleteRoutineEditor(false)"
+                                    class="px-4 py-2.5 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border text-xs font-bold uppercase text-zinc-300 cursor-pointer">
+                                Cancelar
+                            </button>
+                            <button type="button"
+                                    id="athlete-save-routine-btn"
+                                    onclick="saveAthleteCustomRoutine()"
+                                    class="px-5 py-2.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center gap-2">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                                <span>Guardar Mi Rutina</span>
+                            </button>
+                        </div>
+                    </section>
+                `;
+            } else if (blocks.length === 0) {
+                activeBlockHtml = `
+                    <div class="p-6 rounded-2xl bg-bandido-card border border-bandido-border text-center space-y-3">
+                        <p class="text-xs text-zinc-400">Aún no hay rutinas cargadas para tus días de entrenamiento.</p>
+                        ${canEditRoutine ? `
+                            <button type="button" onclick="toggleAthleteRoutineEditor(true)"
+                                    class="px-4 py-2.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs font-extrabold uppercase tracking-wider transition cursor-pointer inline-flex items-center gap-2">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Crear Mi Primera Rutina</span>
+                            </button>
+                        ` : ''}
+                    </div>
+                `;
             } else {
                 const bIdx = selectedAthleteBlockIndex;
                 const blk = blocks[bIdx];
@@ -4480,10 +4800,12 @@
                     </div>
                     <h2 class="font-display text-2xl sm:text-3xl font-bold uppercase text-white">${escapeHtml(payload.n || 'Atleta')}</h2>
 
+                    ${editablePlanControlsHtml}
+
                     ${dayTabsHtml}
 
-                    ${payload.g ? `<p class="text-xs sm:text-sm text-bandido-orange font-semibold pt-1"><i class="fa-solid fa-bullseye mr-1.5"></i>${escapeHtml(payload.g)}</p>` : ''}
-                    ${payload.o ? `<p class="text-xs text-zinc-300 bg-bandido-dark p-2.5 rounded-xl border border-bandido-border"><i class="fa-solid fa-circle-info text-bandido-orange mr-1.5"></i>${escapeHtml(payload.o)}</p>` : ''}
+                    ${!isAthleteEditingRoutine && payload.g ? `<p class="text-xs sm:text-sm text-bandido-orange font-semibold pt-1"><i class="fa-solid fa-bullseye mr-1.5"></i>${escapeHtml(payload.g)}</p>` : ''}
+                    ${!isAthleteEditingRoutine && payload.o ? `<p class="text-xs text-zinc-300 bg-bandido-dark p-2.5 rounded-xl border border-bandido-border"><i class="fa-solid fa-circle-info text-bandido-orange mr-1.5"></i>${escapeHtml(payload.o)}</p>` : ''}
                 </div>
 
                 ${activeBlockHtml}
@@ -4558,10 +4880,14 @@
                             </div>
                         </div>
 
-                        <div>
-                            <div class="flex items-center justify-between mb-1">
-                                <label class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Nivel de Esfuerzo (RPE 1 al 10)</label>
-                                <span id="athlete-rpe-display" class="px-2 py-0.5 rounded bg-bandido-orange/20 text-bandido-orange text-xs font-extrabold">7 / 10</span>
+                        <div class="p-3.5 rounded-xl bg-bandido-dark border border-bandido-border space-y-2">
+                            <div class="flex items-center justify-between">
+                                <label for="athlete-log-rpe" class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">
+                                    Nivel de Esfuerzo Percibido (RPE 1 al 10)
+                                </label>
+                                <span id="athlete-rpe-display" class="px-2.5 py-0.5 rounded-md bg-bandido-orange/20 text-bandido-orange text-xs font-extrabold">
+                                    7 / 10
+                                </span>
                             </div>
                             <input type="range"
                                    id="athlete-log-rpe"
@@ -4570,26 +4896,26 @@
                                    value="7"
                                    oninput="document.getElementById('athlete-rpe-display').textContent = this.value + ' / 10'"
                                    class="w-full accent-cyan-400 cursor-pointer" />
-                            <div class="flex justify-between text-[10px] text-zinc-500 mt-0.5">
+                            <div class="flex justify-between text-[10px] text-zinc-500">
                                 <span>1 · Muy ligero</span>
                                 <span>5 · Moderado</span>
-                                <span>10 · Al fallo</span>
+                                <span>10 · Máximo esfuerzo</span>
                             </div>
                         </div>
 
                         <div>
-                            <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">
-                                Notas de tu sesión (Reps logradas, tiempos en hold, molestias o sensaciones)
+                            <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1.5">
+                                Notas del entrenamiento (Repeticiones logradas, sensaciones, molestias o logros)
                             </label>
                             <textarea id="athlete-log-notes"
                                       rows="3"
-                                      placeholder="Ej. Completé las 4 series sin problema. Subí 2 reps en dominadas y mantuve 20s de L-Sit..."
+                                      placeholder="Ej. Hoy logré sacar las 4 series completas de dominadas limpias, sentí muy buen control en el L-Sit..."
                                       class="w-full px-3.5 py-2.5 rounded-xl bg-bandido-dark border border-bandido-border text-xs sm:text-sm text-white placeholder-zinc-500 focus:outline-none focus:border-bandido-orange"></textarea>
                         </div>
 
                         <button type="submit"
                                 id="athlete-save-progress-btn"
-                                class="w-full py-3.5 px-5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs sm:text-sm font-extrabold uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-2">
+                                class="w-full py-3.5 px-5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black font-extrabold text-xs sm:text-sm uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-2">
                             <i class="fa-solid fa-paper-plane"></i>
                             <span>Guardar Progreso en Historial del Coach</span>
                         </button>
@@ -4601,14 +4927,24 @@
         }
 
         function selectAthleteRoutineDay(dayIndex) {
-            if (!activeAthletePayload || !Array.isArray(activeAthletePayload.b)) return;
-            if (dayIndex < 0 || dayIndex >= activeAthletePayload.b.length) return;
-            selectedAthleteBlockIndex = dayIndex;
+            if (!activeAthletePayload) return;
+            selectedAthleteBlockIndex = Number(dayIndex) || 0;
             const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
             renderAthletePrivateView(activeAthletePayload, isPreview);
+            const activeSection = document.getElementById('athlete-active-day-section');
+            if (activeSection) {
+                activeSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
         }
 
-        function renderAthleteAccessDeniedView(studentName, reason) {
+        function exitAthletePreview() {
+            document.getElementById('athlete-routine-view').classList.add('hidden');
+            document.getElementById('athlete-routine-view').classList.remove('flex');
+            document.getElementById('admin-dashboard-wrapper').classList.remove('hidden');
+            activeAthletePayload = null;
+        }
+
+        function renderRoutineBlockedView(studentName, reason) {
             document.getElementById('admin-dashboard-wrapper').classList.add('hidden');
             const view = document.getElementById('athlete-routine-view');
             view.classList.remove('hidden');
@@ -4616,44 +4952,24 @@
             document.getElementById('exit-preview-btn').classList.add('hidden');
 
             const isDeleted = reason === 'deleted';
-            const titleText = isDeleted ? 'Enlace de Rutina No Disponible' : 'Membresía Vencida o Acceso Pausado';
-            const descText = isDeleted
-                ? 'Este programa de entrenamiento ya no se encuentra activo en el sistema de CoreGravity.'
-                : `Hola ${escapeHtml(studentName || 'Atleta')}, tu acceso privado a la rutina se encuentra temporalmente pausado porque tu mensualidad ha vencido.`;
+            const title = isDeleted ? 'Rutina No Disponible' : 'Acceso Pausado por Mensualidad';
+            const description = isDeleted
+                ? 'Este enlace de entrenamiento ya no se encuentra activo en el sistema de CoreGravity.'
+                : `Hola ${escapeHtml(studentName || 'Atleta')}, tu mensualidad en CoreGravity ha vencido o tu acceso se encuentra temporalmente pausado.`;
 
             const container = document.getElementById('athlete-routine-content');
             container.innerHTML = `
-                <div class="my-8 p-6 sm:p-8 rounded-3xl bg-bandido-card border border-rose-500/40 text-center space-y-5 shadow-2xl">
+                <div class="p-8 rounded-2xl bg-bandido-card border border-rose-500/40 text-center space-y-4 my-8">
                     <div class="w-16 h-16 rounded-2xl bg-rose-500/15 border border-rose-500/30 text-rose-400 flex items-center justify-center mx-auto">
-                        <i class="fa-solid ${isDeleted ? 'fa-link-slash' : 'fa-lock'} text-2xl"></i>
+                        <i class="fa-solid fa-lock text-2xl"></i>
                     </div>
-                    <div class="space-y-2">
-                        <span class="px-3 py-1 rounded-full bg-rose-500/15 text-rose-300 text-[11px] font-extrabold uppercase tracking-wider">
-                            Acceso Restringido · CoreGravity
-                        </span>
-                        <h2 class="font-display text-2xl sm:text-3xl font-bold uppercase text-white mt-2">
-                            ${titleText}
-                        </h2>
-                        <p class="text-xs sm:text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">
-                            ${descText}
-                        </p>
-                    </div>
-                    <div class="p-4 rounded-2xl bg-bandido-dark border border-bandido-border text-xs text-zinc-400 max-w-md mx-auto">
-                        Comunícate con tu entrenador de <strong class="text-white">CORE<span class="text-cyan-400">GRAVITY</span></strong> para renovar tu plan y reactivar tu rutina al instante.
+                    <h2 class="font-display text-2xl font-bold uppercase text-white">${title}</h2>
+                    <p class="text-sm text-zinc-300 max-w-md mx-auto leading-relaxed">${description}</p>
+                    <div class="pt-2">
+                        <p class="text-xs text-zinc-400">Comunícate con tu entrenador de <strong class="text-bandido-orange">CoreGravity</strong> para renovar tu plan y reactivar tus rutinas al instante.</p>
                     </div>
                 </div>
             `;
-        }
-
-        function exitAthletePreview() {
-            const view = document.getElementById('athlete-routine-view');
-            view.classList.add('hidden');
-            view.classList.remove('flex');
-            document.getElementById('admin-dashboard-wrapper').classList.remove('hidden');
-            if (window.location.hash.startsWith('#rutina=')) {
-                history.replaceState(null, '', window.location.pathname + window.location.search);
-            }
-            loadAllStudents().then(() => renderAll());
         }
 
         async function fetchLiveStudentFromSupabase(studentId) {
@@ -4677,89 +4993,99 @@
             }
         }
 
-        async function checkRouteMode() {
+        async function checkPrivateRoutineHash() {
             const hash = window.location.hash || '';
-            if (hash.startsWith('#rutina=')) {
-                const token = hash.slice('#rutina='.length);
-                const payload = await decodeRoutinePayload(token);
-                if (payload) {
-                    if (payload.id) {
-                        const liveCheck = await fetchLiveStudentFromSupabase(payload.id);
-                        if (liveCheck) {
-                            if (liveCheck.deleted) {
-                                renderAthleteAccessDeniedView(payload.n, 'deleted');
-                                return true;
-                            }
-                            if (liveCheck.student) {
-                                if (isRoutineBlocked(liveCheck.student)) {
-                                    renderAthleteAccessDeniedView(liveCheck.student.name || payload.n, 'expired');
-                                    return true;
-                                }
-                                if (liveCheck.student.routine) {
-                                    const allowVideos = planSupportsVideos(liveCheck.student.planKey);
-                                    const plan = GYM_PLANS[liveCheck.student.planKey] || { name: payload.p || 'Plan General' };
-                                    payload.n = liveCheck.student.name || payload.n;
-                                    payload.l = liveCheck.student.level || payload.l;
-                                    payload.p = plan.name;
-                                    payload.d = liveCheck.student.trainingDays || payload.d;
-                                    payload.v = allowVideos ? 1 : 0;
-                                    payload.g = liveCheck.student.routine.goal || '';
-                                    payload.o = liveCheck.student.routine.notes || '';
-                                    payload.b = (liveCheck.student.routine.blocks || []).map(blk => ({
-                                        t: blk.title,
-                                        u: allowVideos ? (blk.videoUrl || '') : '',
-                                        x: blk.text
-                                    }));
-                                }
-                                payload.logs = Array.isArray(liveCheck.student.dailyLogs) ? liveCheck.student.dailyLogs : [];
-                            }
-                        } else {
-                            try {
-                                const rawLocal = localStorage.getItem(LOCAL_STORAGE_KEY);
-                                if (rawLocal) {
-                                    const localList = JSON.parse(rawLocal);
-                                    const localSt = localList.find(s => s.id === payload.id);
-                                    if (localSt) {
-                                        if (isRoutineBlocked(localSt)) {
-                                            renderAthleteAccessDeniedView(localSt.name || payload.n, 'expired');
-                                            return true;
-                                        }
-                                        payload.logs = Array.isArray(localSt.dailyLogs) ? localSt.dailyLogs : [];
-                                    }
-                                }
-                            } catch (e) {}
-                        }
-                    }
+            if (!hash.startsWith('#rutina=')) return false;
+            const token = hash.slice('#rutina='.length).trim();
+            if (!token) return false;
 
+            const payload = await decodeRoutinePayload(token);
+            if (!payload) return false;
+
+            if (payload.id) {
+                const liveCheck = await fetchLiveStudentFromSupabase(payload.id);
+                if (liveCheck) {
+                    if (liveCheck.deleted) {
+                        renderRoutineBlockedView(payload.n, 'deleted');
+                        return true;
+                    }
+                    const liveStudent = liveCheck.student;
+                    if (isRoutineBlocked(liveStudent)) {
+                        renderRoutineBlockedView(liveStudent.name || payload.n, 'paused');
+                        return true;
+                    }
+                    const allowVideos = planSupportsVideos(liveStudent.planKey);
+                    const allowAthleteEdit = planSupportsAthleteEditing(liveStudent.planKey);
+                    const livePlan = GYM_PLANS[liveStudent.planKey] || { name: payload.p || 'Plan General' };
+                    const syncedPayload = {
+                        id: liveStudent.id,
+                        n: liveStudent.name,
+                        l: liveStudent.level || payload.l,
+                        p: livePlan.name,
+                        pk: liveStudent.planKey || payload.pk || '',
+                        d: liveStudent.trainingDays || payload.d || '',
+                        v: allowVideos ? 1 : 0,
+                        e: allowAthleteEdit ? 1 : 0,
+                        g: liveStudent.routine?.goal ?? payload.g,
+                        o: liveStudent.routine?.notes ?? payload.o,
+                        b: Array.isArray(liveStudent.routine?.blocks)
+                            ? liveStudent.routine.blocks.map(blk => ({
+                                t: blk.title,
+                                u: allowVideos ? (blk.videoUrl || '') : '',
+                                x: blk.text
+                            }))
+                            : payload.b,
+                        logs: Array.isArray(liveStudent.dailyLogs) ? liveStudent.dailyLogs : []
+                    };
                     selectedAthleteBlockIndex = 0;
-                    renderAthletePrivateView(payload, false);
+                    isAthleteEditingRoutine = false;
+                    renderAthletePrivateView(syncedPayload, false);
                     return true;
                 }
+
+                try {
+                    const localRaw = localStorage.getItem(LOCAL_STORAGE_KEY);
+                    if (localRaw) {
+                        const localList = JSON.parse(localRaw);
+                        const localSt = Array.isArray(localList) ? localList.find(s => s.id === payload.id) : null;
+                        if (localSt) {
+                            if (isRoutineBlocked(localSt)) {
+                                renderRoutineBlockedView(localSt.name || payload.n, 'paused');
+                                return true;
+                            }
+                            payload.logs = Array.isArray(localSt.dailyLogs) ? localSt.dailyLogs : [];
+                        }
+                    }
+                } catch (e) {}
             }
-            return false;
+
+            selectedAthleteBlockIndex = 0;
+            renderAthletePrivateView(payload, false);
+            return true;
         }
 
-        // =================================================================
-        // INICIALIZACIÓN
-        // =================================================================
+        // Cerrar panel de notificaciones al hacer clic fuera
         document.addEventListener('click', (e) => {
             const panel = document.getElementById('notifications-panel');
-            const bell = document.getElementById('notif-bell-btn');
-            if (panel && !panel.classList.contains('hidden') && !panel.contains(e.target) && !bell.contains(e.target)) {
-                toggleNotificationsPanel(false);
+            const btn = document.getElementById('notif-bell-btn');
+            if (!panel || panel.classList.contains('hidden')) return;
+            if (!panel.contains(e.target) && !btn.contains(e.target)) {
+                panel.classList.add('hidden');
             }
         });
 
-        window.addEventListener('hashchange', () => {
-            checkRouteMode();
-        });
-
+        // Inicialización de la aplicación
         window.addEventListener('DOMContentLoaded', async () => {
-            const isAthleteView = await checkRouteMode();
-            if (!isAthleteView) {
+            loadLocalPlans();
+            const isAthleteMode = await checkPrivateRoutineHash();
+            if (!isAthleteMode) {
                 await loadAllStudents();
                 renderAll();
             }
+        });
+
+        window.addEventListener('hashchange', async () => {
+            await checkPrivateRoutineHash();
         });
     </script>
 </body>

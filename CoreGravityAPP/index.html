@@ -1955,7 +1955,13 @@
                 dailyLogs: Array.isArray(raw.dailyLogs) ? raw.dailyLogs : [],
                 maxRepsLogs: Array.isArray(raw.maxRepsLogs) ? raw.maxRepsLogs : [],
                 routineLibrary: Array.isArray(raw.routineLibrary) ? raw.routineLibrary : [],
-                routineHistory: Array.isArray(raw.routineHistory) ? raw.routineHistory : []
+                routineHistory: Array.isArray(raw.routineHistory) ? raw.routineHistory : [],
+                calendarEvents: Array.isArray(raw.calendarEvents) ? raw.calendarEvents : [],
+                mealLogs: Array.isArray(raw.mealLogs) ? raw.mealLogs : [],
+                nutrition: {
+                    plan: (raw.nutrition && raw.nutrition.plan && typeof raw.nutrition.plan === 'object') ? raw.nutrition.plan : null,
+                    water: (raw.nutrition && raw.nutrition.water && typeof raw.nutrition.water === 'object') ? raw.nutrition.water : {}
+                }
             };
         }
 
@@ -4357,7 +4363,8 @@
                 })),
                 logs: Array.isArray(st.dailyLogs) ? st.dailyLogs : [],
                 maxReps: Array.isArray(st.maxRepsLogs) ? st.maxRepsLogs : [],
-                library: buildBaseRoutineLibraryFromStudent(st)
+                library: buildBaseRoutineLibraryFromStudent(st),
+                ...buildAthleteExtrasFromStudent(st)
             };
             closeRoutineModal();
             selectedAthleteBlockIndex = 0;
@@ -4709,6 +4716,7 @@
         // EDICIÓN / CREACIÓN DE RUTINA POR EL ALUMNO (PLAN INDIVIDUAL EDITABLE)
         // =================================================================
         function switchAthleteEditableTab(tabName) {
+            if (athleteEditableToolTab === 'editor') syncAthleteDraftInputsBeforeAction();
             athleteEditableToolTab = tabName;
             const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
             renderAthletePrivateView(activeAthletePayload, isPreview);
@@ -5038,7 +5046,7 @@
             // PANEL DE NAVEGACIÓN DEL PLAN INDIVIDUAL EDITABLE (5 MÓDULOS)
             // =============================================================
             const editableNavBarHtml = canEditRoutine ? `
-                <div class="p-2 rounded-2xl bg-bandido-card border border-cyan-400/35 grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                <div class="p-2 rounded-2xl bg-bandido-card border border-cyan-400/35 grid grid-cols-2 sm:grid-cols-4 gap-1.5">
                     <button type="button" onclick="switchAthleteEditableTab('train')"
                             class="px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'train' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
                         <i class="fa-solid fa-fire"></i>
@@ -5060,9 +5068,24 @@
                         <span>Reps Máx (${maxReps.length})</span>
                     </button>
                     <button type="button" onclick="switchAthleteEditableTab('share')"
-                            class="col-span-2 sm:col-span-1 px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'share' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
+                            class="px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'share' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
                         <i class="fa-solid fa-share-nodes"></i>
                         <span>Compartir</span>
+                    </button>
+                    <button type="button" onclick="switchAthleteEditableTab('calendar')"
+                            class="px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'calendar' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
+                        <i class="fa-solid fa-calendar-days"></i>
+                        <span>Calendario</span>
+                    </button>
+                    <button type="button" onclick="switchAthleteEditableTab('nutrition')"
+                            class="px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'nutrition' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
+                        <i class="fa-solid fa-utensils"></i>
+                        <span>Alimentación</span>
+                    </button>
+                    <button type="button" onclick="switchAthleteEditableTab('exercises')"
+                            class="px-3 py-2.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide transition cursor-pointer flex items-center justify-center gap-1.5 ${athleteEditableToolTab === 'exercises' ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark text-zinc-300 hover:bg-white/10'}">
+                        <i class="fa-solid fa-dumbbell"></i>
+                        <span>Ejercicios</span>
                     </button>
                 </div>
             ` : '';
@@ -5080,6 +5103,10 @@
                             <div>
                                 <h3 class="font-display text-base font-bold uppercase text-white">Crear o Editar Mi Rutina</h3>
                                 <p class="text-[11px] text-zinc-400">Personaliza tus días, ejercicios y series. Al guardar se añade a tu biblioteca.</p>
+                                <button type="button" onclick="switchAthleteEditableTab('exercises')"
+                                        class="mt-1 text-[11px] font-extrabold text-bandido-orange hover:underline cursor-pointer">
+                                    <i class="fa-solid fa-dumbbell mr-1"></i>Abrir Biblioteca de Ejercicios para armar tu rutina
+                                </button>
                             </div>
                         </div>
                         <button type="button" onclick="startNewBlankRoutineForAthlete()"
@@ -5617,6 +5644,9 @@
                 else if (athleteEditableToolTab === 'library') activeBodyHtml = libraryPanelHtml;
                 else if (athleteEditableToolTab === 'maxreps') activeBodyHtml = maxRepsPanelHtml;
                 else if (athleteEditableToolTab === 'share') activeBodyHtml = sharePanelHtml;
+                else if (athleteEditableToolTab === 'calendar') activeBodyHtml = buildAthleteCalendarPanelHtml(payload);
+                else if (athleteEditableToolTab === 'nutrition') activeBodyHtml = buildAthleteNutritionPanelHtml(payload);
+                else if (athleteEditableToolTab === 'exercises') activeBodyHtml = buildAthleteExercisesPanelHtml(payload);
             }
 
             const content = document.getElementById('athlete-routine-content');
@@ -5654,6 +5684,1031 @@
                 ${editableNavBarHtml}
 
                 ${activeBodyHtml}
+            `;
+        }
+
+        // =================================================================
+        // MÓDULOS NUEVOS DEL PLAN INDIVIDUAL EDITABLE:
+        // CALENDARIO · ALIMENTACIÓN · BIBLIOTECA DE EJERCICIOS
+        // =================================================================
+        let athleteCalCursor = null;
+        let athleteCalSelectedDate = null;
+        let athleteNutritionDate = null;
+        let athleteExCat = 'all';
+        let athleteExLevel = 'all';
+        let athleteExSearch = '';
+        let athleteExTargetBlock = 0;
+        let athletePendingExercises = 0;
+
+        const MONTH_NAMES_FULL = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+        const WEEKDAY_SHORT = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+        const WEEKDAY_BY_JS_DAY = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const MEAL_TYPES = ['Desayuno', 'Colación AM', 'Comida', 'Colación PM', 'Pre-entreno', 'Post-entreno', 'Cena', 'Otro'];
+
+        const CALENDAR_EVENT_TYPES = {
+            entreno: { label: 'Entrenamiento', icon: 'fa-dumbbell', dot: 'bg-cyan-400', cls: 'bg-cyan-500/15 border-cyan-400/40 text-cyan-300' },
+            actividad: { label: 'Actividad', icon: 'fa-person-running', dot: 'bg-emerald-400', cls: 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300' },
+            nutricion: { label: 'Alimentación', icon: 'fa-utensils', dot: 'bg-orange-400', cls: 'bg-orange-500/15 border-orange-400/40 text-orange-300' },
+            descanso: { label: 'Descanso', icon: 'fa-bed', dot: 'bg-violet-400', cls: 'bg-violet-500/15 border-violet-400/40 text-violet-300' },
+            nota: { label: 'Nota', icon: 'fa-note-sticky', dot: 'bg-amber-400', cls: 'bg-amber-500/15 border-amber-400/40 text-amber-300' }
+        };
+
+        // [nombre, categoría, nivel, músculos, descripción, sugerencia para rutina]
+        const EXERCISE_LIBRARY = [
+            // ---------- EMPUJE ----------
+            ['Lagartija estricta (Push-up)', 'Empuje', 'Básico', 'Pecho, tríceps, hombro anterior', 'Manos bajo los hombros y cuerpo en tabla. Baja el pecho al suelo con codos a unos 45° y empuja sin hundir la cadera.', '12 reps'],
+            ['Lagartija inclinada', 'Empuje', 'Básico', 'Pecho, tríceps', 'Manos sobre un banco o barra baja. Reduce la carga: ideal como progresión inicial.', '15 reps'],
+            ['Lagartija diamante', 'Empuje', 'Intermedio', 'Tríceps, pecho interno', 'Manos juntas formando un diamante bajo el pecho y codos pegados al cuerpo.', '10 reps'],
+            ['Lagartija arquera (Archer)', 'Empuje', 'Avanzado', 'Pecho, tríceps, estabilizadores', 'Manos muy abiertas. Baja hacia un lado manteniendo el otro brazo extendido y alterna.', '6 reps por lado'],
+            ['Fondos en paralelas (Dips)', 'Empuje', 'Intermedio', 'Pecho inferior, tríceps, hombro', 'Soporte con brazos extendidos. Baja controlado hasta unos 90° de codo y empuja de vuelta.', '10 reps'],
+            ['Fondos en banco', 'Empuje', 'Básico', 'Tríceps', 'Manos en el borde de un banco, piernas extendidas. Baja flexionando los codos hacia atrás.', '12 reps'],
+            ['Pike push-up', 'Empuje', 'Intermedio', 'Hombros, tríceps', 'Cadera alta en V invertida. Baja la cabeza entre las manos y empuja. Progresión al handstand push-up.', '10 reps'],
+            ['Handstand push-up en pared', 'Empuje', 'Avanzado', 'Hombros, tríceps, trapecio', 'Parada de manos contra la pared. Baja la cabeza hasta rozar el suelo y empuja con control.', '5 reps'],
+            ['Lagartija pseudo planche', 'Empuje', 'Avanzado', 'Hombro anterior, pecho, core', 'Manos a la altura de la cadera con dedos hacia atrás. Inclina el cuerpo hacia adelante al bajar.', '8 reps'],
+            // ---------- TIRÓN ----------
+            ['Colgado pasivo (Dead hang)', 'Tirón', 'Básico', 'Antebrazo, agarre, hombro', 'Cuelga de la barra con brazos extendidos y hombros relajados. Base para ganar agarre y salud de hombro.', '30 seg'],
+            ['Retracción escapular colgado', 'Tirón', 'Básico', 'Trapecio inferior, romboides', 'Colgado, sin doblar codos, baja y junta las escápulas para elevar ligeramente el cuerpo.', '10 reps'],
+            ['Remo australiano', 'Tirón', 'Básico', 'Dorsal, romboides, bíceps', 'Colgado bajo una barra baja con el cuerpo recto. Jala el pecho hacia la barra juntando escápulas.', '12 reps'],
+            ['Dominada negativa', 'Tirón', 'Básico', 'Dorsal, bíceps', 'Sube con salto hasta la barbilla sobre la barra y baja en 4 a 5 segundos controlando.', '5 reps'],
+            ['Dominada supina (Chin-up)', 'Tirón', 'Básico', 'Bíceps, dorsal', 'Agarre supino al ancho de hombros. Sube hasta pasar la barbilla de la barra sin balanceo.', '8 reps'],
+            ['Dominada prona (Pull-up)', 'Tirón', 'Intermedio', 'Dorsal ancho, bíceps, antebrazo', 'Agarre prono, parte desde colgado con escápulas activas y sube hasta pasar la barbilla de la barra.', '8 reps'],
+            ['Dominada con agarre neutro', 'Tirón', 'Intermedio', 'Dorsal, bíceps, braquial', 'Palmas enfrentadas en barras paralelas. Más amable con muñecas y hombros.', '8 reps'],
+            ['Dominada arquera', 'Tirón', 'Avanzado', 'Dorsal, bíceps, core', 'Agarre amplio. Sube hacia una mano manteniendo el otro brazo extendido y alterna.', '4 reps por lado'],
+            ['Muscle-up en barra', 'Tirón', 'Avanzado', 'Dorsal, pectoral, tríceps', 'Dominada explosiva hasta el pecho o cintura, transición sobre la barra y fondo para terminar arriba.', '3 reps'],
+            // ---------- CORE ----------
+            ['Plancha frontal', 'Core', 'Básico', 'Recto abdominal, transverso, glúteo', 'Apoyo en antebrazos y puntas de pies, cuerpo alineado. Aprieta glúteo y abdomen sin hundir la lumbar.', '45 seg'],
+            ['Plancha lateral', 'Core', 'Básico', 'Oblicuos, glúteo medio', 'Apoyo en un antebrazo con el cuerpo en línea recta y cadera arriba.', '30 seg por lado'],
+            ['Superman', 'Core', 'Básico', 'Espalda baja, glúteo', 'Boca abajo, eleva brazos y piernas a la vez y sostén un segundo arriba.', '12 reps'],
+            ['Crunch bicicleta', 'Core', 'Básico', 'Oblicuos, recto abdominal', 'Alterna codo hacia rodilla contraria con las piernas en movimiento de pedaleo.', '20 reps'],
+            ['Hollow body hold', 'Core', 'Intermedio', 'Recto abdominal, flexores de cadera', 'Espalda baja pegada al suelo, brazos y piernas extendidos y elevados. Base de muchos skills.', '30 seg'],
+            ['Elevación de piernas colgado', 'Core', 'Intermedio', 'Abdomen inferior, flexores de cadera', 'Colgado de la barra, sube las piernas rectas hasta 90° sin balancearte.', '10 reps'],
+            ['L-sit en paralelas', 'Core', 'Intermedio', 'Abdomen, flexores de cadera, tríceps', 'Soporte con brazos bloqueados y piernas extendidas al frente, paralelas al suelo.', '15 seg'],
+            ['Toes to bar', 'Core', 'Avanzado', 'Abdomen, dorsal, agarre', 'Colgado, lleva las puntas de los pies hasta tocar la barra con control.', '8 reps'],
+            ['Dragon flag (progresión)', 'Core', 'Avanzado', 'Core completo, dorsal', 'Acostado en banco, sostén el cuerpo recto apoyado en hombros y baja en bloque de forma lenta.', '5 reps'],
+            // ---------- PIERNA ----------
+            ['Sentadilla libre', 'Pierna', 'Básico', 'Cuádriceps, glúteo, isquios', 'Pies al ancho de hombros, baja con espalda neutra hasta romper el paralelo y sube empujando el piso.', '20 reps'],
+            ['Sentadilla isométrica en pared', 'Pierna', 'Básico', 'Cuádriceps, glúteo', 'Espalda apoyada en la pared con rodillas a 90°. Mantén la posición.', '40 seg'],
+            ['Zancada caminando', 'Pierna', 'Básico', 'Cuádriceps, glúteo', 'Da un paso largo, baja la rodilla trasera hacia el suelo y avanza alternando piernas.', '12 reps por pierna'],
+            ['Step-up en banco', 'Pierna', 'Básico', 'Cuádriceps, glúteo', 'Sube a un banco empujando con la pierna de arriba, sin impulso de la pierna de apoyo en el piso.', '12 reps por pierna'],
+            ['Puente de glúteo', 'Pierna', 'Básico', 'Glúteo, isquiotibiales', 'Acostado boca arriba con rodillas dobladas, eleva la cadera apretando glúteos arriba.', '15 reps'],
+            ['Elevación de talones', 'Pierna', 'Básico', 'Gemelos, sóleo', 'De pie sobre un escalón, sube a puntas con pausa arriba y baja el talón por debajo del escalón.', '20 reps'],
+            ['Sentadilla búlgara', 'Pierna', 'Intermedio', 'Cuádriceps, glúteo', 'Pie trasero sobre un banco, baja la rodilla delantera con el torso erguido.', '10 reps por pierna'],
+            ['Puente de glúteo a una pierna', 'Pierna', 'Intermedio', 'Glúteo, isquiotibiales, core', 'Una pierna extendida al frente y la otra empuja para elevar la cadera.', '10 reps por pierna'],
+            ['Sentadilla con salto', 'Pierna', 'Intermedio', 'Cuádriceps, glúteo, potencia', 'Baja a sentadilla y salta explosivo. Aterriza suave y repite sin pausa.', '12 reps'],
+            ['Cossack squat', 'Pierna', 'Intermedio', 'Aductores, glúteo, movilidad de cadera', 'Pies muy abiertos, baja sobre una pierna manteniendo la otra extendida con el talón en el piso.', '8 reps por lado'],
+            ['Pistol squat (progresión)', 'Pierna', 'Avanzado', 'Cuádriceps, glúteo, equilibrio', 'Sentadilla a una pierna con la otra extendida al frente. Empieza asistido con TRX, banda o banco.', '5 reps por pierna'],
+            ['Curl nórdico', 'Pierna', 'Avanzado', 'Isquiotibiales', 'De rodillas con los talones fijos, baja el torso al frente lo más lento posible y ayúdate con las manos al final.', '5 reps'],
+            // ---------- CARDIO ----------
+            ['Jumping jacks', 'Cardio', 'Básico', 'Cuerpo completo, cardio', 'Salta abriendo piernas y subiendo los brazos sobre la cabeza. Ideal para calentar.', '40 seg'],
+            ['Rodillas altas', 'Cardio', 'Básico', 'Flexores de cadera, cardio', 'Corre en el lugar llevando las rodillas a la altura de la cadera.', '30 seg'],
+            ['Mountain climbers', 'Cardio', 'Básico', 'Core, hombros, cardio', 'En posición de plancha alta, lleva las rodillas al pecho de forma alterna y rápida.', '30 seg'],
+            ['Gateo del oso (Bear crawl)', 'Cardio', 'Básico', 'Hombros, core, cuádriceps', 'Avanza en cuadrupedia con rodillas a unos centímetros del suelo y espalda plana.', '20 metros'],
+            ['Saltar la cuerda', 'Cardio', 'Básico', 'Gemelos, hombros, cardio', 'Saltos cortos sobre la parte delantera del pie con muñecas activas. Requiere cuerda.', '60 seg'],
+            ['Carrera continua suave', 'Cardio', 'Básico', 'Sistema cardiovascular', 'Trote a ritmo conversacional para construir base aeróbica.', '15 a 20 min'],
+            ['Burpees', 'Cardio', 'Intermedio', 'Cuerpo completo, cardio', 'Baja a lagartija, regresa los pies, salta y aplaude arriba. Mantén ritmo constante.', '12 reps'],
+            ['Saltos laterales (Skater jumps)', 'Cardio', 'Intermedio', 'Glúteo, cuádriceps, equilibrio', 'Salta de lado a lado aterrizando sobre una pierna con control.', '20 reps'],
+            ['Sprints 30 metros', 'Cardio', 'Intermedio', 'Piernas, potencia, cardio', 'Aceleración máxima durante 30 metros con descanso caminando al regresar.', '6 rondas'],
+            ['Salto al cajón (Box jump)', 'Cardio', 'Intermedio', 'Cuádriceps, glúteo, potencia', 'Salta al cajón con ambos pies y baja caminando para cuidar el tendón de Aquiles.', '10 reps'],
+            ['Tuck jumps', 'Cardio', 'Avanzado', 'Cuádriceps, core, potencia', 'Salto vertical llevando las rodillas al pecho en el aire. Aterriza suave.', '10 reps'],
+            // ---------- SKILLS ----------
+            ['Frog stand (rana)', 'Skills', 'Básico', 'Muñecas, core, equilibrio', 'Apoya las rodillas en los codos y eleva los pies del suelo. Primer paso hacia la planche.', '20 seg'],
+            ['Handstand contra pared', 'Skills', 'Intermedio', 'Hombros, core, muñecas', 'Parada de manos de espaldas a la pared con cuerpo alineado y hombros empujando hacia arriba.', '30 seg'],
+            ['Back lever tuck', 'Skills', 'Intermedio', 'Dorsal, hombro, core', 'Giro hacia atrás en anillas o barra y sostén con rodillas recogidas y espalda paralela al suelo.', '10 seg'],
+            ['Front lever tuck', 'Skills', 'Avanzado', 'Dorsal, core, agarre', 'Colgado con rodillas al pecho y espalda paralela al suelo, brazos extendidos.', '8 seg'],
+            ['Tuck planche', 'Skills', 'Avanzado', 'Hombro anterior, core, muñecas', 'Apoyo en manos con rodillas recogidas y cadera elevada a la altura de los hombros.', '8 seg'],
+            // ---------- MOVILIDAD ----------
+            ['Gato-vaca', 'Movilidad', 'Básico', 'Columna, core', 'En cuadrupedia alterna redondear y arquear la espalda al ritmo de la respiración.', '10 reps'],
+            ['Sentadilla profunda con pausa', 'Movilidad', 'Básico', 'Cadera, tobillos, aductores', 'Baja a sentadilla profunda, abre rodillas con los codos y respira en la posición.', '45 seg'],
+            ['Zancada profunda de cadera', 'Movilidad', 'Básico', 'Flexores de cadera, glúteo', 'Zancada baja con la rodilla trasera en el suelo. Empuja la cadera al frente.', '30 seg por lado'],
+            ['Rotación torácica en cuadrupedia', 'Movilidad', 'Básico', 'Columna torácica, hombros', 'Una mano detrás de la cabeza, abre el codo hacia el techo y regresa.', '10 reps por lado']
+        ].map((r, i) => ({ id: 'ex_' + (i + 1), name: r[0], cat: r[1], level: r[2], muscles: r[3], desc: r[4], rep: r[5] }));
+
+        const EXERCISE_CATEGORIES = ['Empuje', 'Tirón', 'Core', 'Pierna', 'Cardio', 'Skills', 'Movilidad'];
+        const EXERCISE_CAT_ICONS = {
+            Empuje: 'fa-hand-fist',
+            Tirón: 'fa-arrow-up',
+            Core: 'fa-circle-dot',
+            Pierna: 'fa-shoe-prints',
+            Cardio: 'fa-heart-pulse',
+            Skills: 'fa-bolt',
+            Movilidad: 'fa-arrows-rotate'
+        };
+        const EXERCISE_LEVEL_CLS = {
+            'Básico': 'bg-emerald-500/15 border-emerald-400/40 text-emerald-300',
+            'Intermedio': 'bg-amber-500/15 border-amber-400/40 text-amber-300',
+            'Avanzado': 'bg-rose-500/15 border-rose-400/40 text-rose-300'
+        };
+
+        // ---------------- Utilidades compartidas ----------------
+        function buildAthleteExtrasFromStudent(st) {
+            const norm = normalizeStudentRecord(st, st.id);
+            return {
+                calendar: norm.calendarEvents,
+                meals: norm.mealLogs,
+                nutrition: norm.nutrition
+            };
+        }
+
+        function rerenderAthleteView() {
+            if (!activeAthletePayload) return;
+            const isPreview = !document.getElementById('exit-preview-btn').classList.contains('hidden');
+            renderAthletePrivateView(activeAthletePayload, isPreview);
+        }
+
+        function dateParts(dateStr) {
+            const [y, m, d] = String(dateStr || getTodayStr()).split('-').map(Number);
+            return { y, m: m - 1, d };
+        }
+
+        function dateToStr(y, m, d) {
+            return `${y}-${String(m + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+
+        // addDaysToDateStr trata 0 como 30, por eso se maneja el 0 aparte
+        function shiftDateStr(dateStr, delta) {
+            return delta === 0 ? dateStr : addDaysToDateStr(dateStr, delta);
+        }
+
+        async function persistAthleteExtra(mutatorFn, errorMsg = 'No se pudo sincronizar. Tu cambio quedó guardado en este dispositivo.') {
+            try {
+                await persistAthleteSelfData(mutatorFn);
+            } catch (err) {
+                console.error('Error guardando datos del alumno:', err);
+                showToast(errorMsg, true);
+            }
+        }
+
+        // =================================================================
+        // MÓDULO CALENDARIO (ANOTACIONES Y ACTIVIDADES)
+        // =================================================================
+        function ensureAthleteCalendarState() {
+            if (!athleteCalCursor) {
+                const p = dateParts(getTodayStr());
+                athleteCalCursor = { y: p.y, m: p.m };
+            }
+            if (!athleteCalSelectedDate) athleteCalSelectedDate = getTodayStr();
+        }
+
+        function athleteCalChangeMonth(delta) {
+            ensureAthleteCalendarState();
+            let { y, m } = athleteCalCursor;
+            m += delta;
+            while (m < 0) { m += 12; y--; }
+            while (m > 11) { m -= 12; y++; }
+            athleteCalCursor = { y, m };
+            rerenderAthleteView();
+        }
+
+        function athleteCalGoToday() {
+            const today = getTodayStr();
+            const p = dateParts(today);
+            athleteCalCursor = { y: p.y, m: p.m };
+            athleteCalSelectedDate = today;
+            rerenderAthleteView();
+        }
+
+        function athleteCalSelectDate(dateStr) {
+            athleteCalSelectedDate = dateStr;
+            rerenderAthleteView();
+        }
+
+        async function submitAthleteCalendarEvent(event) {
+            event.preventDefault();
+            if (!activeAthletePayload) return;
+            const title = (document.getElementById('athlete-cal-title')?.value || '').trim();
+            const type = document.getElementById('athlete-cal-type')?.value || 'nota';
+            const time = document.getElementById('athlete-cal-time')?.value || '';
+            const date = document.getElementById('athlete-cal-date')?.value || athleteCalSelectedDate;
+            const notes = (document.getElementById('athlete-cal-notes')?.value || '').trim();
+            if (!title || !date) {
+                showToast('Escribe un título y elige la fecha.', true);
+                return;
+            }
+
+            const entry = {
+                id: 'cal_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                title, type, time, date, notes,
+                done: false,
+                createdAt: new Date().toISOString()
+            };
+            if (!Array.isArray(activeAthletePayload.calendar)) activeAthletePayload.calendar = [];
+            activeAthletePayload.calendar.push(entry);
+
+            const p = dateParts(date);
+            athleteCalSelectedDate = date;
+            athleteCalCursor = { y: p.y, m: p.m };
+            rerenderAthleteView();
+            showToast('Anotación agregada a tu calendario.');
+            await persistAthleteExtra(st => { st.calendarEvents.push(entry); });
+        }
+
+        async function toggleAthleteCalendarEventDone(eventId) {
+            if (!activeAthletePayload || !Array.isArray(activeAthletePayload.calendar)) return;
+            const ev = activeAthletePayload.calendar.find(e => e.id === eventId);
+            if (!ev) return;
+            const newDone = !ev.done;
+            ev.done = newDone;
+            rerenderAthleteView();
+            await persistAthleteExtra(st => {
+                const target = st.calendarEvents.find(e => e.id === eventId);
+                if (target) target.done = newDone;
+            });
+        }
+
+        async function deleteAthleteCalendarEvent(eventId) {
+            if (!activeAthletePayload || !Array.isArray(activeAthletePayload.calendar)) return;
+            activeAthletePayload.calendar = activeAthletePayload.calendar.filter(e => e.id !== eventId);
+            rerenderAthleteView();
+            showToast('Anotación eliminada.');
+            await persistAthleteExtra(st => {
+                st.calendarEvents = st.calendarEvents.filter(e => e.id !== eventId);
+            });
+        }
+
+        function buildAthleteCalendarPanelHtml(payload) {
+            ensureAthleteCalendarState();
+            const events = Array.isArray(payload.calendar) ? payload.calendar : [];
+            const logs = Array.isArray(payload.logs) ? payload.logs : [];
+            const prs = Array.isArray(payload.maxReps) ? payload.maxReps : [];
+            const meals = Array.isArray(payload.meals) ? payload.meals : [];
+            const { y, m } = athleteCalCursor;
+            const today = getTodayStr();
+            const selected = athleteCalSelectedDate;
+            const firstOffset = (new Date(y, m, 1).getDay() + 6) % 7;
+            const daysInMonth = new Date(y, m + 1, 0).getDate();
+
+            const eventsByDate = {};
+            events.forEach(ev => {
+                if (!ev || !ev.date) return;
+                (eventsByDate[ev.date] = eventsByDate[ev.date] || []).push(ev);
+            });
+            const logDates = new Set(logs.map(l => l.date));
+            const prDates = new Set(prs.map(p => p.date));
+
+            let cells = '';
+            for (let i = 0; i < firstOffset; i++) cells += '<div></div>';
+            for (let d = 1; d <= daysInMonth; d++) {
+                const ds = dateToStr(y, m, d);
+                const dayEvents = eventsByDate[ds] || [];
+                const isToday = ds === today;
+                const isSel = ds === selected;
+                const dots = dayEvents.slice(0, 3).map(ev =>
+                    `<span class="w-1.5 h-1.5 rounded-full ${(CALENDAR_EVENT_TYPES[ev.type] || CALENDAR_EVENT_TYPES.nota).dot}"></span>`
+                ).join('');
+                const extraMarks = `${logDates.has(ds) ? '<i class="fa-solid fa-circle-check text-[9px] text-emerald-300" title="Sesión registrada"></i>' : ''}${prDates.has(ds) ? '<i class="fa-solid fa-trophy text-[9px] text-amber-300" title="Récord registrado"></i>' : ''}`;
+                cells += `
+                    <button type="button" onclick="athleteCalSelectDate('${ds}')"
+                            class="h-14 sm:h-16 rounded-xl border p-1.5 flex flex-col items-start justify-between text-left transition cursor-pointer ${isSel ? 'bg-bandido-orange/20 border-bandido-orange' : (isToday ? 'bg-bandido-dark border-cyan-400/60' : 'bg-bandido-dark border-bandido-border hover:border-cyan-400/40')}">
+                        <span class="text-xs font-extrabold ${isSel ? 'text-bandido-orange' : (isToday ? 'text-cyan-300' : 'text-zinc-200')}">${d}</span>
+                        <span class="flex items-center gap-1 flex-wrap">${dots}${extraMarks}</span>
+                    </button>
+                `;
+            }
+
+            const selEvents = (eventsByDate[selected] || []).slice().sort((a, b) => (a.time || '99:99').localeCompare(b.time || '99:99'));
+            const selLogs = logs.filter(l => l.date === selected);
+            const selPrs = prs.filter(p => p.date === selected);
+            const selKcal = meals.filter(x => x.date === selected).reduce((acc, x) => acc + Number(x.calories || 0), 0);
+
+            const eventRows = selEvents.map(ev => {
+                const t = CALENDAR_EVENT_TYPES[ev.type] || CALENDAR_EVENT_TYPES.nota;
+                return `
+                    <div class="p-3 rounded-xl bg-bandido-dark border border-bandido-border flex items-start justify-between gap-2.5">
+                        <div class="flex items-start gap-2.5 min-w-0">
+                            <button type="button" onclick="toggleAthleteCalendarEventDone('${escapeHtml(ev.id)}')"
+                                    title="Marcar como completada"
+                                    class="mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center text-[10px] cursor-pointer shrink-0 ${ev.done ? 'bg-emerald-500 border-emerald-400 text-black' : 'border-bandido-border text-transparent hover:border-bandido-orange'}">
+                                <i class="fa-solid fa-check"></i>
+                            </button>
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-1.5">
+                                    <span class="text-xs font-bold ${ev.done ? 'text-zinc-500 line-through' : 'text-white'}">${escapeHtml(ev.title)}</span>
+                                    <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold ${t.cls}"><i class="fa-solid ${t.icon} mr-1"></i>${t.label}</span>
+                                    ${ev.time ? `<span class="text-[11px] text-zinc-400"><i class="fa-solid fa-clock text-bandido-orange mr-1"></i>${escapeHtml(ev.time)}</span>` : ''}
+                                </div>
+                                ${ev.notes ? `<p class="text-[11px] text-zinc-300 mt-1 whitespace-pre-line">${escapeHtml(ev.notes)}</p>` : ''}
+                            </div>
+                        </div>
+                        <button type="button" onclick="deleteAthleteCalendarEvent('${escapeHtml(ev.id)}')"
+                                title="Eliminar"
+                                class="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 cursor-pointer shrink-0">
+                            <i class="fa-solid fa-trash text-xs"></i>
+                        </button>
+                    </div>
+                `;
+            }).join('');
+
+            const autoRows = `
+                ${selLogs.map(l => `
+                    <div class="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 flex items-center gap-2">
+                        <i class="fa-solid fa-circle-check"></i>
+                        <span>Sesión registrada: <strong class="text-white">${escapeHtml(l.blockTitle || 'Entrenamiento')}</strong> · RPE ${escapeHtml(String(l.rpe || 7))}/10</span>
+                    </div>
+                `).join('')}
+                ${selPrs.map(p => `
+                    <div class="p-3 rounded-xl bg-amber-500/10 border border-amber-400/30 text-xs text-amber-200 flex items-center gap-2">
+                        <i class="fa-solid fa-trophy"></i>
+                        <span>Récord: <strong class="text-white">${escapeHtml(p.exercise)}</strong> · ${escapeHtml(String(p.value))} ${escapeHtml(p.unit || 'reps')}</span>
+                    </div>
+                `).join('')}
+                ${selKcal > 0 ? `
+                    <div class="p-3 rounded-xl bg-orange-500/10 border border-orange-400/30 text-xs text-orange-200 flex items-center gap-2">
+                        <i class="fa-solid fa-utensils"></i>
+                        <span>Alimentación del día: <strong class="text-white">${Math.round(selKcal)} kcal</strong> registradas</span>
+                    </div>
+                ` : ''}
+            `;
+
+            const upcoming = events
+                .filter(ev => ev && ev.date && ev.date >= today && !ev.done)
+                .sort((a, b) => (a.date + (a.time || '99:99')).localeCompare(b.date + (b.time || '99:99')))
+                .slice(0, 5);
+
+            const sp = dateParts(selected);
+            const selectedLabel = `${WEEKDAY_BY_JS_DAY[new Date(sp.y, sp.m, sp.d).getDay()]} ${formatDisplayDate(selected)}`;
+
+            return `
+                <div class="space-y-5">
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-4">
+                        <div class="flex flex-wrap items-center justify-between gap-2 border-b border-bandido-border pb-3">
+                            <div class="flex items-center gap-2.5">
+                                <span class="w-9 h-9 rounded-xl bg-cyan-500/20 text-cyan-300 flex items-center justify-center text-base">
+                                    <i class="fa-solid fa-calendar-days"></i>
+                                </span>
+                                <div>
+                                    <h3 class="font-display text-base sm:text-lg font-bold uppercase text-white">Mi Calendario</h3>
+                                    <p class="text-[11px] text-zinc-400">Anota entrenos, actividades, descansos y recordatorios. Se sincroniza con tu cuenta.</p>
+                                </div>
+                            </div>
+                            <button type="button" onclick="athleteCalGoToday()"
+                                    class="px-3 py-1.5 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-orange/40 text-[11px] font-extrabold text-bandido-orange cursor-pointer">
+                                Hoy
+                            </button>
+                        </div>
+
+                        <div class="flex items-center justify-between">
+                            <button type="button" onclick="athleteCalChangeMonth(-1)"
+                                    class="w-9 h-9 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border text-zinc-200 cursor-pointer">
+                                <i class="fa-solid fa-chevron-left text-xs"></i>
+                            </button>
+                            <h4 class="font-display text-lg font-bold uppercase text-white">${MONTH_NAMES_FULL[m]} ${y}</h4>
+                            <button type="button" onclick="athleteCalChangeMonth(1)"
+                                    class="w-9 h-9 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border text-zinc-200 cursor-pointer">
+                                <i class="fa-solid fa-chevron-right text-xs"></i>
+                            </button>
+                        </div>
+
+                        <div class="grid grid-cols-7 gap-1.5 text-center">
+                            ${WEEKDAY_SHORT.map(w => `<span class="text-[10px] font-extrabold uppercase tracking-wider text-zinc-400">${w}</span>`).join('')}
+                        </div>
+                        <div class="grid grid-cols-7 gap-1.5">${cells}</div>
+
+                        <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-zinc-400 pt-1">
+                            ${Object.values(CALENDAR_EVENT_TYPES).map(t => `<span class="flex items-center gap-1"><span class="w-1.5 h-1.5 rounded-full ${t.dot}"></span>${t.label}</span>`).join('')}
+                            <span class="flex items-center gap-1"><i class="fa-solid fa-circle-check text-[9px] text-emerald-300"></i>Sesión registrada</span>
+                            <span class="flex items-center gap-1"><i class="fa-solid fa-trophy text-[9px] text-amber-300"></i>Récord</span>
+                        </div>
+                    </div>
+
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-4">
+                        <h4 class="font-display text-base font-bold uppercase text-white flex items-center gap-2">
+                            <i class="fa-solid fa-clipboard-list text-bandido-orange"></i>
+                            <span>${escapeHtml(selectedLabel)}</span>
+                        </h4>
+
+                        <div class="space-y-2">
+                            ${eventRows}${autoRows}
+                            ${(eventRows + autoRows).trim() === '' ? '<p class="text-xs text-zinc-400 text-center py-4">Sin anotaciones para este día. Agrega una abajo.</p>' : ''}
+                        </div>
+
+                        <form onsubmit="submitAthleteCalendarEvent(event)" class="p-4 rounded-2xl bg-bandido-dark border border-bandido-orange/35 space-y-3">
+                            <h5 class="text-xs font-extrabold uppercase tracking-wider text-bandido-orange">+ Nueva anotación o actividad</h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <div class="sm:col-span-2">
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Título *</label>
+                                    <input type="text" id="athlete-cal-title" required
+                                           placeholder="Ej. Entreno de pierna, caminata 5 km, medir peso..."
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Tipo</label>
+                                    <select id="athlete-cal-type"
+                                            class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange cursor-pointer">
+                                        ${Object.entries(CALENDAR_EVENT_TYPES).map(([k, t]) => `<option value="${k}">${t.label}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Fecha</label>
+                                        <input type="date" id="athlete-cal-date" value="${escapeHtml(selected)}"
+                                               class="w-full px-2.5 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                    </div>
+                                    <div>
+                                        <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Hora</label>
+                                        <input type="time" id="athlete-cal-time"
+                                               class="w-full px-2.5 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                    </div>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Notas (opcional)</label>
+                                    <textarea id="athlete-cal-notes" rows="2"
+                                              placeholder="Detalles, metas del día, cómo te sentiste..."
+                                              class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-bandido-orange"></textarea>
+                                </div>
+                            </div>
+                            <button type="submit"
+                                    class="w-full py-2.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-calendar-plus"></i>
+                                <span>Guardar en Calendario</span>
+                            </button>
+                        </form>
+                    </div>
+
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-3">
+                        <h4 class="text-xs font-extrabold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                            <i class="fa-solid fa-bell text-bandido-orange"></i>
+                            <span>Próximas actividades</span>
+                        </h4>
+                        ${upcoming.length === 0
+                            ? '<p class="text-xs text-zinc-400 text-center py-3">No tienes actividades pendientes próximas.</p>'
+                            : upcoming.map(ev => {
+                                const t = CALENDAR_EVENT_TYPES[ev.type] || CALENDAR_EVENT_TYPES.nota;
+                                return `
+                                    <button type="button" onclick="athleteCalSelectDate('${escapeHtml(ev.date)}'); athleteCalCursor = { y: ${dateParts(ev.date).y}, m: ${dateParts(ev.date).m} }; rerenderAthleteView();"
+                                            class="w-full p-3 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border flex items-center justify-between gap-2 text-left cursor-pointer">
+                                        <div class="min-w-0">
+                                            <p class="text-xs font-bold text-white truncate">${escapeHtml(ev.title)}</p>
+                                            <p class="text-[11px] text-zinc-400">${formatDisplayDate(ev.date)}${ev.time ? ` · ${escapeHtml(ev.time)}` : ''}</p>
+                                        </div>
+                                        <span class="px-1.5 py-0.5 rounded border text-[10px] font-bold shrink-0 ${t.cls}">${t.label}</span>
+                                    </button>
+                                `;
+                            }).join('')
+                        }
+                    </div>
+                </div>
+            `;
+        }
+
+        // =================================================================
+        // MÓDULO ALIMENTACIÓN (REGISTRO DIARIO, METAS Y PLAN ALIMENTICIO)
+        // =================================================================
+        function sumAthleteMeals(list) {
+            return list.reduce((acc, x) => ({
+                kcal: acc.kcal + Number(x.calories || 0),
+                p: acc.p + Number(x.protein || 0),
+                c: acc.c + Number(x.carbs || 0),
+                f: acc.f + Number(x.fat || 0)
+            }), { kcal: 0, p: 0, c: 0, f: 0 });
+        }
+
+        function ensureAthleteNutritionShape(payload) {
+            if (!payload.nutrition || typeof payload.nutrition !== 'object') payload.nutrition = { plan: null, water: {} };
+            if (!payload.nutrition.water || typeof payload.nutrition.water !== 'object') payload.nutrition.water = {};
+            if (!Array.isArray(payload.meals)) payload.meals = [];
+        }
+
+        function athleteNutritionChangeDay(delta) {
+            if (!athleteNutritionDate) athleteNutritionDate = getTodayStr();
+            athleteNutritionDate = shiftDateStr(athleteNutritionDate, delta);
+            rerenderAthleteView();
+        }
+
+        function athleteNutritionSetDate(value) {
+            if (!value) return;
+            athleteNutritionDate = value;
+            rerenderAthleteView();
+        }
+
+        function athleteNutritionGoToday() {
+            athleteNutritionDate = getTodayStr();
+            rerenderAthleteView();
+        }
+
+        async function submitAthleteMeal(event) {
+            event.preventDefault();
+            if (!activeAthletePayload) return;
+            ensureAthleteNutritionShape(activeAthletePayload);
+            const food = (document.getElementById('athlete-meal-food')?.value || '').trim();
+            if (!food) {
+                showToast('Escribe qué comiste.', true);
+                return;
+            }
+            const num = id => {
+                const v = Number(document.getElementById(id)?.value || 0);
+                return isNaN(v) || v < 0 ? 0 : v;
+            };
+            const entry = {
+                id: 'meal_' + Date.now() + '_' + Math.floor(Math.random() * 1000),
+                date: athleteNutritionDate || getTodayStr(),
+                meal: document.getElementById('athlete-meal-type')?.value || 'Comida',
+                food,
+                calories: num('athlete-meal-kcal'),
+                protein: num('athlete-meal-protein'),
+                carbs: num('athlete-meal-carbs'),
+                fat: num('athlete-meal-fat'),
+                createdAt: new Date().toISOString()
+            };
+            activeAthletePayload.meals.push(entry);
+            rerenderAthleteView();
+            showToast('Comida registrada.');
+            await persistAthleteExtra(st => { st.mealLogs.push(entry); });
+        }
+
+        async function deleteAthleteMeal(mealId) {
+            if (!activeAthletePayload) return;
+            ensureAthleteNutritionShape(activeAthletePayload);
+            activeAthletePayload.meals = activeAthletePayload.meals.filter(x => x.id !== mealId);
+            rerenderAthleteView();
+            showToast('Registro eliminado.');
+            await persistAthleteExtra(st => { st.mealLogs = st.mealLogs.filter(x => x.id !== mealId); });
+        }
+
+        async function adjustAthleteWater(delta) {
+            if (!activeAthletePayload) return;
+            ensureAthleteNutritionShape(activeAthletePayload);
+            const date = athleteNutritionDate || getTodayStr();
+            const newVal = Math.max(0, Number(activeAthletePayload.nutrition.water[date] || 0) + delta);
+            activeAthletePayload.nutrition.water[date] = newVal;
+            rerenderAthleteView();
+            await persistAthleteExtra(st => { st.nutrition.water[date] = newVal; });
+        }
+
+        async function saveAthleteNutritionPlan(event) {
+            event.preventDefault();
+            if (!activeAthletePayload) return;
+            ensureAthleteNutritionShape(activeAthletePayload);
+            const num = id => {
+                const v = Number(document.getElementById(id)?.value || 0);
+                return isNaN(v) || v < 0 ? 0 : v;
+            };
+            const plan = {
+                goal: document.getElementById('athlete-plan-goal')?.value || 'Mantenimiento',
+                calories: num('athlete-plan-kcal'),
+                protein: num('athlete-plan-protein'),
+                carbs: num('athlete-plan-carbs'),
+                fat: num('athlete-plan-fat'),
+                water: num('athlete-plan-water') || 8,
+                text: (document.getElementById('athlete-plan-text')?.value || '').trim(),
+                updatedAt: getTodayStr()
+            };
+            activeAthletePayload.nutrition.plan = plan;
+            rerenderAthleteView();
+            showToast('Plan alimenticio guardado.');
+            await persistAthleteExtra(st => { st.nutrition.plan = JSON.parse(JSON.stringify(plan)); });
+        }
+
+        function nutritionBarHtml(label, value, target, unit, barCls) {
+            const v = Math.round(value);
+            const hasTarget = Number(target) > 0;
+            const pct = hasTarget ? Math.min(100, Math.round((value / target) * 100)) : 0;
+            const over = hasTarget && value > target * 1.1;
+            return `
+                <div>
+                    <div class="flex items-center justify-between text-[11px] mb-1">
+                        <span class="font-bold text-zinc-300">${label}</span>
+                        <span class="${over ? 'text-amber-300' : 'text-zinc-400'} font-semibold">${v}${hasTarget ? ` / ${Math.round(target)}` : ''} ${unit}</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-white/10 overflow-hidden">
+                        <div class="h-full rounded-full ${over ? 'bg-amber-400' : barCls}" style="width:${hasTarget ? pct : 0}%"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function buildAthleteNutritionPanelHtml(payload) {
+            ensureAthleteNutritionShape(payload);
+            if (!athleteNutritionDate) athleteNutritionDate = getTodayStr();
+            const date = athleteNutritionDate;
+            const plan = payload.nutrition.plan || null;
+            const meals = payload.meals;
+            const dayMeals = meals.filter(x => x.date === date);
+            const totals = sumAthleteMeals(dayMeals);
+            const waterGoal = Math.max(1, Number(plan?.water || 8));
+            const waterCount = Number(payload.nutrition.water[date] || 0);
+            const kcalTarget = Number(plan?.calories || 0);
+            const remaining = kcalTarget > 0 ? Math.round(kcalTarget - totals.kcal) : null;
+
+            const hour = new Date().getHours();
+            const defaultMeal = hour < 11 ? 'Desayuno' : hour < 16 ? 'Comida' : hour < 19 ? 'Colación PM' : 'Cena';
+
+            const glasses = Array.from({ length: Math.min(waterGoal, 16) }, (_, i) =>
+                `<i class="fa-solid fa-glass-water text-base ${i < waterCount ? 'text-cyan-300' : 'text-zinc-600'}"></i>`
+            ).join('');
+
+            const mealGroups = MEAL_TYPES.map(type => {
+                const items = dayMeals.filter(x => x.meal === type);
+                if (items.length === 0) return '';
+                const sub = sumAthleteMeals(items);
+                return `
+                    <div class="space-y-1.5">
+                        <div class="flex items-center justify-between">
+                            <span class="text-[11px] font-extrabold uppercase tracking-wider text-bandido-orange">${escapeHtml(type)}</span>
+                            <span class="text-[11px] text-zinc-400">${Math.round(sub.kcal)} kcal</span>
+                        </div>
+                        ${items.map(x => `
+                            <div class="p-3 rounded-xl bg-bandido-dark border border-bandido-border flex items-start justify-between gap-2">
+                                <div class="min-w-0">
+                                    <p class="text-xs font-bold text-white">${escapeHtml(x.food)}</p>
+                                    <p class="text-[11px] text-zinc-400 mt-0.5">
+                                        ${Math.round(Number(x.calories || 0))} kcal
+                                        · P ${Math.round(Number(x.protein || 0))}g
+                                        · C ${Math.round(Number(x.carbs || 0))}g
+                                        · G ${Math.round(Number(x.fat || 0))}g
+                                    </p>
+                                </div>
+                                <button type="button" onclick="deleteAthleteMeal('${escapeHtml(x.id)}')"
+                                        title="Eliminar"
+                                        class="p-1.5 rounded-lg text-zinc-500 hover:text-rose-400 cursor-pointer shrink-0">
+                                    <i class="fa-solid fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }).join('');
+
+            const weekData = [];
+            for (let i = 6; i >= 0; i--) {
+                const ds = shiftDateStr(date, -i);
+                weekData.push({ ds, kcal: sumAthleteMeals(meals.filter(x => x.date === ds)).kcal });
+            }
+            const weekMax = Math.max(1, kcalTarget, ...weekData.map(w => w.kcal));
+            const daysWithData = weekData.filter(w => w.kcal > 0);
+            const weekAvg = daysWithData.length > 0 ? Math.round(daysWithData.reduce((a, w) => a + w.kcal, 0) / daysWithData.length) : 0;
+
+            const goalOptions = ['Definición', 'Mantenimiento', 'Volumen', 'Rendimiento'];
+
+            return `
+                <div class="space-y-5">
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-4">
+                        <div class="flex items-center gap-2.5 border-b border-bandido-border pb-3">
+                            <span class="w-9 h-9 rounded-xl bg-orange-500/20 text-orange-300 flex items-center justify-center text-base">
+                                <i class="fa-solid fa-utensils"></i>
+                            </span>
+                            <div>
+                                <h3 class="font-display text-base sm:text-lg font-bold uppercase text-white">Mi Alimentación</h3>
+                                <p class="text-[11px] text-zinc-400">Registra lo que comes, controla tus metas y sigue tu plan alimenticio.</p>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between gap-2">
+                            <button type="button" onclick="athleteNutritionChangeDay(-1)"
+                                    class="w-9 h-9 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border text-zinc-200 cursor-pointer">
+                                <i class="fa-solid fa-chevron-left text-xs"></i>
+                            </button>
+                            <div class="flex items-center gap-2">
+                                <input type="date" value="${escapeHtml(date)}" onchange="athleteNutritionSetDate(this.value)"
+                                       class="px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs font-bold text-white focus:outline-none focus:border-bandido-orange" />
+                                <button type="button" onclick="athleteNutritionGoToday()"
+                                        class="px-3 py-2 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-orange/40 text-[11px] font-extrabold text-bandido-orange cursor-pointer">
+                                    Hoy
+                                </button>
+                            </div>
+                            <button type="button" onclick="athleteNutritionChangeDay(1)"
+                                    class="w-9 h-9 rounded-xl bg-bandido-dark hover:bg-white/10 border border-bandido-border text-zinc-200 cursor-pointer">
+                                <i class="fa-solid fa-chevron-right text-xs"></i>
+                            </button>
+                        </div>
+
+                        <div class="p-4 rounded-2xl bg-bandido-dark border border-bandido-border space-y-3">
+                            <div class="flex items-end justify-between gap-2">
+                                <div>
+                                    <p class="text-[11px] font-bold uppercase tracking-wider text-zinc-400">Calorías del día</p>
+                                    <p class="font-display text-3xl font-bold text-white">${Math.round(totals.kcal)} <span class="text-sm text-zinc-400">kcal</span></p>
+                                </div>
+                                ${remaining !== null ? `
+                                    <span class="px-2.5 py-1 rounded-lg border text-[11px] font-bold ${remaining >= 0 ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-300' : 'bg-amber-500/15 border-amber-500/30 text-amber-300'}">
+                                        ${remaining >= 0 ? `Te quedan ${remaining} kcal` : `Excedido por ${Math.abs(remaining)} kcal`}
+                                    </span>
+                                ` : `<span class="text-[11px] text-zinc-500">Define tus metas abajo</span>`}
+                            </div>
+                            ${nutritionBarHtml('Calorías', totals.kcal, kcalTarget, 'kcal', 'bg-bandido-orange')}
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                ${nutritionBarHtml('Proteína', totals.p, Number(plan?.protein || 0), 'g', 'bg-sky-400')}
+                                ${nutritionBarHtml('Carbohidratos', totals.c, Number(plan?.carbs || 0), 'g', 'bg-emerald-400')}
+                                ${nutritionBarHtml('Grasas', totals.f, Number(plan?.fat || 0), 'g', 'bg-amber-400')}
+                            </div>
+                        </div>
+
+                        <div class="p-4 rounded-2xl bg-bandido-dark border border-cyan-400/30 flex flex-wrap items-center justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="text-[11px] font-bold uppercase tracking-wider text-cyan-300">Hidratación · ${waterCount} / ${waterGoal} vasos</p>
+                                <div class="flex flex-wrap items-center gap-1.5 mt-1.5">${glasses}</div>
+                            </div>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="adjustAthleteWater(-1)"
+                                        class="w-9 h-9 rounded-xl bg-bandido-card hover:bg-white/10 border border-bandido-border text-zinc-200 cursor-pointer">
+                                    <i class="fa-solid fa-minus text-xs"></i>
+                                </button>
+                                <button type="button" onclick="adjustAthleteWater(1)"
+                                        class="w-9 h-9 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black cursor-pointer">
+                                    <i class="fa-solid fa-plus text-xs"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-4">
+                        <form onsubmit="submitAthleteMeal(event)" class="p-4 rounded-2xl bg-bandido-dark border border-bandido-orange/35 space-y-3">
+                            <h5 class="text-xs font-extrabold uppercase tracking-wider text-bandido-orange">+ Registrar comida</h5>
+                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Momento</label>
+                                    <select id="athlete-meal-type"
+                                            class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange cursor-pointer">
+                                        ${MEAL_TYPES.map(t => `<option value="${t}" ${t === defaultMeal ? 'selected' : ''}>${t}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div class="sm:col-span-2">
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">¿Qué comiste? *</label>
+                                    <input type="text" id="athlete-meal-food" required
+                                           placeholder="Ej. 3 huevos con frijoles y tortilla"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Calorías</label>
+                                    <input type="number" min="0" step="any" id="athlete-meal-kcal" placeholder="kcal"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Proteína (g)</label>
+                                    <input type="number" min="0" step="any" id="athlete-meal-protein" placeholder="g"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Carbos (g)</label>
+                                    <input type="number" min="0" step="any" id="athlete-meal-carbs" placeholder="g"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Grasas (g)</label>
+                                    <input type="number" min="0" step="any" id="athlete-meal-fat" placeholder="g"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                            </div>
+                            <button type="submit"
+                                    class="w-full py-2.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>Guardar Comida</span>
+                            </button>
+                        </form>
+
+                        <div class="space-y-3">
+                            <h4 class="text-xs font-bold uppercase tracking-wider text-zinc-400">Comidas del ${formatDisplayDate(date)} (${dayMeals.length})</h4>
+                            ${mealGroups || '<p class="text-xs text-zinc-400 text-center py-4">Aún no registras comidas en este día.</p>'}
+                        </div>
+                    </div>
+
+                    <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h4 class="text-xs font-extrabold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                                <i class="fa-solid fa-chart-column text-bandido-orange"></i>
+                                <span>Últimos 7 días (kcal)</span>
+                            </h4>
+                            <span class="text-[11px] text-zinc-400">Promedio: <strong class="text-white">${weekAvg}</strong> kcal</span>
+                        </div>
+                        <div class="flex items-end gap-1.5 sm:gap-2">
+                            ${weekData.map(w => {
+                                const pct = Math.max(w.kcal > 0 ? 4 : 0, Math.round((w.kcal / weekMax) * 100));
+                                const dp = dateParts(w.ds);
+                                const label = WEEKDAY_BY_JS_DAY[new Date(dp.y, dp.m, dp.d).getDay()];
+                                const isSel = w.ds === date;
+                                return `
+                                    <button type="button" onclick="athleteNutritionSetDate('${w.ds}')"
+                                            class="flex-1 flex flex-col items-center gap-1 cursor-pointer">
+                                        <span class="text-[10px] text-zinc-400">${w.kcal > 0 ? Math.round(w.kcal) : '–'}</span>
+                                        <div class="w-full h-24 flex items-end">
+                                            <div class="w-full rounded-t-lg ${isSel ? 'bg-bandido-orange' : 'bg-cyan-400/40'}" style="height:${pct}%"></div>
+                                        </div>
+                                        <span class="text-[10px] font-bold ${isSel ? 'text-bandido-orange' : 'text-zinc-400'}">${label} ${dp.d}</span>
+                                    </button>
+                                `;
+                            }).join('')}
+                        </div>
+                    </div>
+
+                    ${plan && plan.text ? `
+                        <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-2">
+                            <h4 class="text-xs font-extrabold uppercase tracking-wider text-bandido-orange flex items-center gap-1.5">
+                                <i class="fa-solid fa-list-check"></i>
+                                <span>Mi Plan Alimenticio · ${escapeHtml(plan.goal || '')}</span>
+                            </h4>
+                            <p class="text-xs text-zinc-200 whitespace-pre-line leading-relaxed">${escapeHtml(plan.text)}</p>
+                        </div>
+                    ` : ''}
+
+                    <details ${plan ? '' : 'open'} class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border">
+                        <summary class="cursor-pointer text-xs font-extrabold uppercase tracking-wider text-zinc-200 flex items-center gap-2">
+                            <i class="fa-solid fa-sliders text-bandido-orange"></i>
+                            <span>${plan ? 'Editar mis metas y plan alimenticio' : 'Define tus metas y tu plan alimenticio'}</span>
+                        </summary>
+                        <form onsubmit="saveAthleteNutritionPlan(event)" class="mt-4 space-y-3">
+                            <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                                <div class="col-span-2 sm:col-span-1">
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Objetivo</label>
+                                    <select id="athlete-plan-goal"
+                                            class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange cursor-pointer">
+                                        ${goalOptions.map(g => `<option value="${g}" ${plan?.goal === g ? 'selected' : ''}>${g}</option>`).join('')}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Meta kcal</label>
+                                    <input type="number" min="0" id="athlete-plan-kcal" value="${plan?.calories || ''}" placeholder="2200"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Proteína (g)</label>
+                                    <input type="number" min="0" id="athlete-plan-protein" value="${plan?.protein || ''}" placeholder="140"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Carbos (g)</label>
+                                    <input type="number" min="0" id="athlete-plan-carbs" value="${plan?.carbs || ''}" placeholder="250"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Grasas (g)</label>
+                                    <input type="number" min="0" id="athlete-plan-fat" value="${plan?.fat || ''}" placeholder="70"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                <div>
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Meta de agua (vasos)</label>
+                                    <input type="number" min="1" max="30" id="athlete-plan-water" value="${plan?.water || 8}"
+                                           class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange" />
+                                </div>
+                                <div class="sm:col-span-3">
+                                    <label class="block text-[11px] font-bold uppercase tracking-wider text-zinc-400 mb-1">Mi plan alimenticio (comidas, horarios, reglas)</label>
+                                    <textarea id="athlete-plan-text" rows="5"
+                                              placeholder="Desayuno: avena con fruta y proteína&#10;Comida: pollo, arroz y verduras&#10;Cena: huevos con ensalada&#10;Evitar: refrescos y ultraprocesados"
+                                              class="w-full px-3 py-2 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-bandido-orange">${escapeHtml(plan?.text || '')}</textarea>
+                                </div>
+                            </div>
+                            <button type="submit"
+                                    class="w-full py-2.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-xs font-extrabold uppercase tracking-wider transition shadow-lg shadow-cyan-500/25 cursor-pointer flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-floppy-disk"></i>
+                                <span>Guardar Metas y Plan</span>
+                            </button>
+                        </form>
+                    </details>
+                </div>
+            `;
+        }
+
+        // =================================================================
+        // MÓDULO BIBLIOTECA DE EJERCICIOS (APOYO PARA ARMAR RUTINAS)
+        // =================================================================
+        function exerciseMatchesFilters(ex) {
+            if (athleteExCat !== 'all' && ex.cat !== athleteExCat) return false;
+            if (athleteExLevel !== 'all' && ex.level !== athleteExLevel) return false;
+            const q = athleteExSearch.toLowerCase().trim();
+            if (q && !`${ex.name} ${ex.muscles} ${ex.cat}`.toLowerCase().includes(q)) return false;
+            return true;
+        }
+
+        function setAthleteExerciseCategory(cat) {
+            athleteExCat = cat;
+            rerenderAthleteView();
+        }
+
+        function setAthleteExerciseLevel(level) {
+            athleteExLevel = level;
+            rerenderAthleteView();
+        }
+
+        function setAthleteExTargetBlock(value) {
+            athleteExTargetBlock = Number(value) || 0;
+        }
+
+        function onAthleteExerciseSearchInput(value) {
+            athleteExSearch = value || '';
+            let visible = 0;
+            document.querySelectorAll('[data-ex-id]').forEach(el => {
+                const ex = EXERCISE_LIBRARY.find(e => e.id === el.getAttribute('data-ex-id'));
+                const show = Boolean(ex && exerciseMatchesFilters(ex));
+                el.classList.toggle('hidden', !show);
+                if (show) visible++;
+            });
+            const counter = document.getElementById('athlete-ex-count');
+            if (counter) counter.textContent = visible;
+            const empty = document.getElementById('athlete-ex-empty');
+            if (empty) empty.classList.toggle('hidden', visible > 0);
+        }
+
+        function goToRoutineEditorFromLibrary() {
+            athletePendingExercises = 0;
+            switchAthleteEditableTab('editor');
+        }
+
+        function addLibraryExerciseToRoutine(exId) {
+            if (!activeAthletePayload) return;
+            const ex = EXERCISE_LIBRARY.find(e => e.id === exId);
+            if (!ex) return;
+            if (!Array.isArray(activeAthletePayload.b) || activeAthletePayload.b.length === 0) {
+                activeAthletePayload.b = [{ t: 'Día 1 — Entrenamiento', u: '', x: '' }];
+            }
+            const idx = Math.min(Math.max(0, athleteExTargetBlock), activeAthletePayload.b.length - 1);
+            const blk = activeAthletePayload.b[idx];
+            const line = `${ex.name} / ${ex.rep}`;
+            blk.x = blk.x && blk.x.trim() ? `${blk.x.replace(/\s+$/, '')}\n${line}` : line;
+            athletePendingExercises++;
+            rerenderAthleteView();
+            showToast(`"${ex.name}" agregado a ${blk.t || `Día ${idx + 1}`}.`);
+        }
+
+        function buildAthleteExercisesPanelHtml(payload) {
+            const blocks = Array.isArray(payload.b) ? payload.b : [];
+            if (athleteExTargetBlock >= Math.max(1, blocks.length)) athleteExTargetBlock = 0;
+            const filtered = EXERCISE_LIBRARY.filter(exerciseMatchesFilters);
+
+            const chip = (value, label, icon) => `
+                <button type="button" onclick="setAthleteExerciseCategory('${value}')"
+                        class="px-3 py-1.5 rounded-xl text-[11px] font-extrabold uppercase tracking-wide whitespace-nowrap transition cursor-pointer flex items-center gap-1.5 ${athleteExCat === value ? 'bg-bandido-orange text-black shadow' : 'bg-bandido-dark border border-bandido-border text-zinc-300 hover:bg-white/10'}">
+                    <i class="fa-solid ${icon}"></i><span>${label}</span>
+                </button>
+            `;
+
+            const cards = EXERCISE_LIBRARY.map(ex => `
+                <div data-ex-id="${ex.id}" class="${exerciseMatchesFilters(ex) ? '' : 'hidden'} p-4 rounded-2xl bg-bandido-dark border border-bandido-border space-y-2.5 flex flex-col">
+                    <div class="flex items-start justify-between gap-2">
+                        <h4 class="text-sm font-extrabold text-white leading-snug">${escapeHtml(ex.name)}</h4>
+                        <span class="px-2 py-0.5 rounded border text-[10px] font-bold shrink-0 ${EXERCISE_LEVEL_CLS[ex.level] || ''}">${escapeHtml(ex.level)}</span>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <span class="px-2 py-0.5 rounded bg-bandido-orange/15 text-bandido-orange text-[10px] font-extrabold uppercase">
+                            <i class="fa-solid ${EXERCISE_CAT_ICONS[ex.cat] || 'fa-dumbbell'} mr-1"></i>${escapeHtml(ex.cat)}
+                        </span>
+                        <span class="text-[11px] text-zinc-400">${escapeHtml(ex.muscles)}</span>
+                    </div>
+                    <p class="text-xs text-zinc-300 leading-relaxed flex-1">${escapeHtml(ex.desc)}</p>
+                    <div class="flex items-center justify-between gap-2 pt-1">
+                        <span class="text-[11px] font-bold text-zinc-300"><i class="fa-solid fa-repeat text-bandido-orange mr-1"></i>${escapeHtml(ex.rep)}</span>
+                        <button type="button" onclick="addLibraryExerciseToRoutine('${ex.id}')"
+                                class="px-3 py-1.5 rounded-xl bg-bandido-orange hover:bg-bandido-orange-hover text-black text-[11px] font-extrabold uppercase transition cursor-pointer flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i><span>A mi rutina</span>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            return `
+                <div class="p-4 sm:p-5 rounded-3xl bg-bandido-card border border-bandido-border space-y-4">
+                    <div class="flex items-center gap-2.5 border-b border-bandido-border pb-3">
+                        <span class="w-9 h-9 rounded-xl bg-bandido-orange/15 text-bandido-orange flex items-center justify-center text-base">
+                            <i class="fa-solid fa-dumbbell"></i>
+                        </span>
+                        <div>
+                            <h3 class="font-display text-base sm:text-lg font-bold uppercase text-white">Biblioteca de Ejercicios</h3>
+                            <p class="text-[11px] text-zinc-400">Calistenia, pierna, cardio y más. Agrégalos a un día de tu rutina con un toque.</p>
+                        </div>
+                    </div>
+
+                    <div class="p-3.5 rounded-2xl bg-bandido-dark border border-bandido-orange/35 flex flex-wrap items-center justify-between gap-2.5">
+                        <div class="flex items-center gap-2 text-xs text-zinc-200">
+                            <span class="font-bold">Agregar a:</span>
+                            <select onchange="setAthleteExTargetBlock(this.value)"
+                                    class="px-3 py-1.5 rounded-xl bg-bandido-card border border-bandido-border text-xs text-white focus:outline-none focus:border-bandido-orange cursor-pointer">
+                                ${blocks.length === 0
+                                    ? '<option value="0">Día 1 (nuevo)</option>'
+                                    : blocks.map((b, i) => `<option value="${i}" ${i === athleteExTargetBlock ? 'selected' : ''}>${escapeHtml(b.t || `Día ${i + 1}`)}</option>`).join('')}
+                            </select>
+                        </div>
+                        ${athletePendingExercises > 0 ? `
+                            <button type="button" onclick="goToRoutineEditorFromLibrary()"
+                                    class="px-3 py-1.5 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-[11px] font-extrabold text-emerald-300 cursor-pointer flex items-center gap-1.5">
+                                <i class="fa-solid fa-pen-to-square"></i>
+                                <span>${athletePendingExercises} agregado(s): revisar y guardar en Crear / Editar</span>
+                            </button>
+                        ` : `<span class="text-[11px] text-zinc-400">Los ejercicios se agregan como borrador; guárdalos en Crear / Editar.</span>`}
+                    </div>
+
+                    <div class="relative">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 text-xs"></i>
+                        <input type="text" value="${escapeHtml(athleteExSearch)}" oninput="onAthleteExerciseSearchInput(this.value)"
+                               placeholder="Buscar ejercicio o músculo..."
+                               class="w-full pl-9 pr-4 py-2.5 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-bandido-orange" />
+                    </div>
+
+                    <div class="flex items-center gap-2 overflow-x-auto pb-1">
+                        ${chip('all', 'Todos', 'fa-layer-group')}
+                        ${EXERCISE_CATEGORIES.map(c => chip(c, c, EXERCISE_CAT_ICONS[c])).join('')}
+                    </div>
+
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="text-[11px] text-zinc-400"><strong id="athlete-ex-count" class="text-white">${filtered.length}</strong> ejercicio(s)</span>
+                        <select onchange="setAthleteExerciseLevel(this.value)"
+                                class="px-3 py-1.5 rounded-xl bg-bandido-dark border border-bandido-border text-xs text-zinc-200 focus:outline-none focus:border-bandido-orange cursor-pointer">
+                            ${['all', 'Básico', 'Intermedio', 'Avanzado'].map(l => `<option value="${l}" ${athleteExLevel === l ? 'selected' : ''}>${l === 'all' ? 'Todos los niveles' : l}</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">${cards}</div>
+                    <p id="athlete-ex-empty" class="${filtered.length === 0 ? '' : 'hidden'} text-xs text-zinc-400 text-center py-6">No hay ejercicios con esos filtros.</p>
+                </div>
             `;
         }
 
@@ -5770,6 +6825,7 @@
                             payload.logs = Array.isArray(st.dailyLogs) ? st.dailyLogs : [];
                             payload.maxReps = Array.isArray(st.maxRepsLogs) ? st.maxRepsLogs : [];
                             payload.library = buildBaseRoutineLibraryFromStudent(st);
+                            Object.assign(payload, buildAthleteExtrasFromStudent(st));
                         }
                     } else {
                         try {
@@ -5785,6 +6841,7 @@
                                 payload.logs = normLocal.dailyLogs;
                                 payload.maxReps = normLocal.maxRepsLogs;
                                 payload.library = buildBaseRoutineLibraryFromStudent(normLocal);
+                                Object.assign(payload, buildAthleteExtrasFromStudent(normLocal));
                                 if (normLocal.routine && Array.isArray(normLocal.routine.blocks) && normLocal.routine.blocks.length > 0) {
                                     const allowVideos = planSupportsVideos(normLocal.planKey);
                                     payload.g = normLocal.routine.goal || '';
